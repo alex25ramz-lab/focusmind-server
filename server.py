@@ -2,56 +2,68 @@ from flask import Flask, render_template_string, request, jsonify
 
 app = Flask(__name__)
 
-# Base de datos temporal en memoria
+# Memoria temporal del servidor
 datos_usuario = {
     "progreso": 0,
-    "ultima_tarea": "Ninguna"
+    "ultima_tarea": "Ninguna",
+    "status": "Esperando..."
 }
 
-# --- INTERFAZ PARA EL CELULAR (HTML/CSS) ---
-# Esta es la vista que verás al entrar a tu link de Render
+# --- INTERFAZ DINÁMICA PARA EL CELULAR ---
 HTML_MOVIL = """
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FocusMind Dashboard</title>
+    <title>FocusMind Cloud</title>
     <style>
-        body { font-family: sans-serif; background-color: #0d1117; color: white; text-align: center; padding: 20px; }
-        .card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
-        input { width: 90%; padding: 12px; margin: 10px 0; border-radius: 6px; border: 1px solid #30363d; background: #0d1117; color: white; }
-        button { width: 95%; padding: 15px; background-color: #238636; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
-        h1 { font-size: 1.5rem; margin-bottom: 20px; border-bottom: 1px solid #30363d; padding-bottom: 10px; }
+        body { font-family: 'Segoe UI', sans-serif; background: #0d1117; color: white; text-align: center; padding: 20px; }
+        .card { background: #161b22; border: 1px solid #30363d; border-radius: 15px; padding: 25px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .circle { width: 120px; height: 120px; border-radius: 50%; border: 8px solid #30363d; border-top: 8px solid #238636; margin: 20px auto; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: bold; }
+        input { width: 85%; padding: 15px; border-radius: 8px; border: 1px solid #30363d; background: #0d1117; color: white; margin-bottom: 15px; font-size: 1rem; }
+        button { width: 90%; padding: 18px; border-radius: 8px; border: none; background: #238636; color: white; font-weight: bold; font-size: 1.1rem; cursor: pointer; transition: 0.3s; }
+        button:active { transform: scale(0.95); background: #2ea043; }
+        .status { color: #8b949e; font-size: 0.9rem; margin-top: 10px; }
     </style>
+    
+    <script>
+        setInterval(function(){
+            // Solo refresca si no estás escribiendo nada
+            if(document.activeElement.tagName !== 'INPUT') {
+                location.reload();
+            }
+        }, 5000); 
+    </script>
 </head>
 <body>
-    <h1>📊 DASHBOARD DE INGENIERÍA</h1>
+    <h1>🚀 FocusMind Control</h1>
     
     <div class="card">
-        <h3>Progreso de Hoy</h3>
-        <div style="font-size: 2rem; color: #58a6ff;">{{ progreso }}%</div>
+        <h3>Progreso en Laptop</h3>
+        <div class="circle">{{ progreso }}%</div>
+        <p class="status">Última acción: <b>{{ ultima_tarea }}</b></p>
     </div>
 
     <div class="card">
-        <input type="text" id="tarea" placeholder="¿En qué vas a trabajar?">
-        <button onclick="enviar()">MANDAR A LA PC</button>
+        <input type="text" id="tareaInput" placeholder="Escribe tarea para la PC...">
+        <button onclick="enviarALaptop()">MANDAR A LA PC</button>
     </div>
 
     <script>
-        function enviar() {
-            const tareaInput = document.getElementById('tarea');
-            if(!tareaInput.value) return alert("Escribe una tarea, compa");
+        function enviarALaptop() {
+            const tarea = document.getElementById('tareaInput').value;
+            if(!tarea) return alert("Escribe algo, compa");
 
             fetch('/actualizar', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({'ultima_tarea': tareaInput.value})
+                body: JSON.stringify({ 'ultima_tarea': tarea, 'progreso': 0 })
             })
             .then(res => res.json())
             .then(data => {
-                alert("¡Tarea enviada a la nube!");
-                tareaInput.value = "";
+                alert("Enviado a la laptop con éxito");
+                document.getElementById('tareaInput').value = "";
             });
         }
     </script>
@@ -59,29 +71,20 @@ HTML_MOVIL = """
 </html>
 """
 
-# --- RUTAS DE COMUNICACIÓN ---
-
 @app.route('/')
 def home():
-    # Renderiza la interfaz del celular con el progreso actual
-    return render_template_string(HTML_MOVIL, progreso=datos_usuario["progreso"])
+    return render_template_string(HTML_MOVIL, progreso=datos_usuario["progreso"], ultima_tarea=datos_usuario["ultima_tarea"])
 
 @app.route('/actualizar', methods=['POST'])
 def actualizar():
     global datos_usuario
-    datos_recibidos = request.json
-    
-    # Actualiza los datos con lo que mande el Celular o la Laptop
-    if 'ultima_tarea' in datos_recibidos:
-        datos_usuario["ultima_tarea"] = datos_recibidos['ultima_tarea']
-    if 'progreso' in datos_recibidos:
-        datos_usuario["progreso"] = datos_recibidos['progreso']
-        
-    return jsonify({"status": "recibido", "datos_actuales": datos_usuario})
+    datos = request.json
+    if 'ultima_tarea' in datos: datos_usuario["ultima_tarea"] = datos['ultima_tarea']
+    if 'progreso' in datos: datos_usuario["progreso"] = datos['progreso']
+    return jsonify({"status": "ok"})
 
 @app.route('/obtener_datos', methods=['GET'])
 def obtener_datos():
-    # Esta es la ruta que tu Laptop consulta cada 5 segundos
     return jsonify(datos_usuario)
 
 if __name__ == '__main__':
