@@ -2,37 +2,31 @@ from flask import Flask, render_template_string, request, jsonify
 
 app = Flask(__name__)
 
-# Memoria temporal del servidor
 datos_usuario = {
     "progreso": 0,
     "ultima_tarea": "Ninguna",
-    "status": "Esperando..."
+    "tiempo_meta": "10" # Valor por defecto
 }
 
-# --- INTERFAZ DINÁMICA PARA EL CELULAR ---
 HTML_MOVIL = """
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FocusMind Cloud</title>
+    <title>FocusMind Control</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #0d1117; color: white; text-align: center; padding: 20px; }
-        .card { background: #161b22; border: 1px solid #30363d; border-radius: 15px; padding: 25px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .circle { width: 120px; height: 120px; border-radius: 50%; border: 8px solid #30363d; border-top: 8px solid #238636; margin: 20px auto; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: bold; }
-        input { width: 85%; padding: 15px; border-radius: 8px; border: 1px solid #30363d; background: #0d1117; color: white; margin-bottom: 15px; font-size: 1rem; }
-        button { width: 90%; padding: 18px; border-radius: 8px; border: none; background: #238636; color: white; font-weight: bold; font-size: 1.1rem; cursor: pointer; transition: 0.3s; }
-        button:active { transform: scale(0.95); background: #2ea043; }
-        .status { color: #8b949e; font-size: 0.9rem; margin-top: 10px; }
+        .card { background: #161b22; border: 1px solid #30363d; border-radius: 15px; padding: 25px; margin-bottom: 20px; }
+        .circle { width: 100px; height: 100px; border-radius: 50%; border: 8px solid #30363d; border-top: 8px solid #238636; margin: 15px auto; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; font-weight: bold; }
+        input { width: 85%; padding: 12px; border-radius: 8px; border: 1px solid #30363d; background: #0d1117; color: white; margin-bottom: 10px; }
+        .input-meta { width: 40%; border-color: #58a6ff; }
+        button { width: 90%; padding: 15px; border-radius: 8px; border: none; background: #238636; color: white; font-weight: bold; cursor: pointer; }
+        .status { color: #8b949e; font-size: 0.8rem; }
     </style>
-    
     <script>
         setInterval(function(){
-            // Solo refresca si no estás escribiendo nada
-            if(document.activeElement.tagName !== 'INPUT') {
-                location.reload();
-            }
+            if(document.activeElement.tagName !== 'INPUT') { location.reload(); }
         }, 5000); 
     </script>
 </head>
@@ -40,29 +34,38 @@ HTML_MOVIL = """
     <h1>🚀 FocusMind Control</h1>
     
     <div class="card">
-        <h3>Progreso en Laptop</h3>
+        <h3>Estado Actual</h3>
         <div class="circle">{{ progreso }}%</div>
-        <p class="status">Última acción: <b>{{ ultima_tarea }}</b></p>
+        <p class="status">Última: <b>{{ ultima_tarea }}</b></p>
     </div>
 
     <div class="card">
-        <input type="text" id="tareaInput" placeholder="Escribe tarea para la PC...">
+        <p>Nueva Tarea:</p>
+        <input type="text" id="tareaInput" placeholder="Nombre de la tarea...">
+        <p>Tiempo Meta (Minutos):</p>
+        <input type="number" id="metaInput" class="input-meta" value="25">
+        <br><br>
         <button onclick="enviarALaptop()">MANDAR A LA PC</button>
     </div>
 
     <script>
         function enviarALaptop() {
             const tarea = document.getElementById('tareaInput').value;
-            if(!tarea) return alert("Escribe algo, compa");
+            const meta = document.getElementById('metaInput').value;
+            if(!tarea) return alert("Escribe la tarea");
 
             fetch('/actualizar', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ 'ultima_tarea': tarea, 'progreso': 0 })
+                body: JSON.stringify({ 
+                    'ultima_tarea': tarea, 
+                    'tiempo_meta': meta,
+                    'progreso': 0 
+                })
             })
             .then(res => res.json())
             .then(data => {
-                alert("Enviado a la laptop con éxito");
+                alert("Sincronizado con éxito");
                 document.getElementById('tareaInput').value = "";
             });
         }
@@ -80,6 +83,7 @@ def actualizar():
     global datos_usuario
     datos = request.json
     if 'ultima_tarea' in datos: datos_usuario["ultima_tarea"] = datos['ultima_tarea']
+    if 'tiempo_meta' in datos: datos_usuario["tiempo_meta"] = datos['tiempo_meta']
     if 'progreso' in datos: datos_usuario["progreso"] = datos['progreso']
     return jsonify({"status": "ok"})
 
