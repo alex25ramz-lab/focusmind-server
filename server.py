@@ -4,114 +4,150 @@ html_template = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>FocusMind Hub</title>
+    <title>FocusMind Ultimate</title>
     <style>
         :root {
-            --bg: #0d1117;
-            --card: #161b22;
-            --accent: #58a6ff;
-            --text: #c9d1d9;
-            --success: #238636;
+            --bg: #05070a;
+            --glass: rgba(255, 255, 255, 0.03);
+            --border: rgba(255, 255, 255, 0.1);
+            --accent: #00d2ff;
+            --accent-2: #3a7bd5;
+            --success: #00ff88;
         }
 
         body {
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg);
-            color: var(--text);
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: radial-gradient(circle at top, #1a2a44 0%, #05070a 100%);
+            color: #ffffff;
             margin: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             min-height: 100vh;
-            padding: 20px;
-            box-sizing: border-box;
+            overflow: hidden;
         }
 
-        .container {
-            width: 100%;
-            max-width: 400px;
-            background: var(--card);
-            padding: 30px;
-            border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            border: 1px solid #30363d;
+        .glass-card {
+            background: var(--glass);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 32px;
+            padding: 40px 25px;
+            width: 85%;
+            max-width: 360px;
             text-align: center;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+        }
+
+        .logo-area {
+            margin-bottom: 30px;
         }
 
         h1 {
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            background: linear-gradient(to right, var(--accent), var(--accent-2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin: 0;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        label {
+            font-size: 0.75rem;
             color: var(--accent);
-            font-size: 1.8rem;
-            margin-bottom: 5px;
+            margin-left: 12px;
+            text-transform: uppercase;
             letter-spacing: 1px;
+            font-weight: bold;
         }
 
-        p {
-            font-size: 0.9rem;
-            opacity: 0.7;
-            margin-bottom: 25px;
-        }
-
-        input[type="text"], input[type="number"] {
+        input {
             width: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
+            border-radius: 16px;
             padding: 15px;
-            margin-bottom: 15px;
-            background: var(--bg);
-            border: 1px solid #30363d;
-            border-radius: 10px;
             color: white;
             font-size: 1rem;
+            margin-top: 8px;
             box-sizing: border-box;
             outline: none;
-            transition: border 0.3s;
+            transition: 0.3s;
         }
 
         input:focus {
             border-color: var(--accent);
+            box-shadow: 0 0 15px rgba(0, 210, 255, 0.2);
         }
 
         button {
             width: 100%;
-            padding: 18px;
-            background-color: var(--success);
-            color: white;
+            background: linear-gradient(45deg, var(--accent-2), var(--accent));
             border: none;
-            border-radius: 12px;
-            font-size: 1.1rem;
-            font-weight: bold;
+            padding: 18px;
+            border-radius: 18px;
+            color: white;
+            font-weight: 800;
+            font-size: 1rem;
             cursor: pointer;
-            transition: transform 0.1s, background 0.3s;
-            box-shadow: 0 4px 15px rgba(35, 134, 54, 0.3);
+            margin-top: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: 0.3s;
+            box-shadow: 0 10px 20px rgba(0, 210, 255, 0.3);
         }
 
         button:active {
-            transform: scale(0.97);
-            background-color: #2ea043;
+            transform: scale(0.95);
+            filter: brightness(1.2);
         }
 
-        .status {
-            margin-top: 20px;
-            padding: 10px;
-            border-radius: 8px;
-            font-size: 0.85rem;
-            background: rgba(88, 166, 255, 0.1);
-            color: var(--accent);
+        .status-badge {
+            margin-top: 30px;
+            font-size: 0.7rem;
+            color: var(--success);
+            background: rgba(0, 255, 136, 0.1);
+            padding: 8px 16px;
+            border-radius: 100px;
+            display: inline-block;
+            border: 1px solid rgba(0, 255, 136, 0.2);
+            text-transform: uppercase;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>FOCUSMIND</h1>
-        <p>Remote Command Center</p>
-        
+    <div class="glass-card">
+        <div class="logo-area">
+            <h1>FOCUSMIND</h1>
+            <p style="font-size: 0.8rem; opacity: 0.5;">Remote Interface V4.0</p>
+        </div>
+
         <form action="/actualizar" method="post">
-            <input type="text" name="ultima_tarea" placeholder="¿En qué vamos a trabajar?" required>
-            <input type="number" name="tiempo_meta" placeholder="Tiempo (minutos)" value="25">
-            <button type="submit">ENVIAR A LA LAPTOP</button>
+            <div class="input-group">
+                <label>Misión / Tarea</label>
+                <input type="text" name="ultima_tarea" placeholder="Ej: Estudiar Dinámica" required>
+            </div>
+            
+            <div class="input-group">
+                <label>Cronómetro (MIN)</label>
+                <input type="number" name="tiempo_meta" value="25">
+            </div>
+
+            <button type="submit">DESPLEGAR COMANDO</button>
         </form>
 
-        <div class="status">
-            Conectado al servidor de Render v3.0
+        <div class="status-badge">
+            ● SISTEMA EN LÍNEA
         </div>
     </div>
 </body>
