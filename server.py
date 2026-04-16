@@ -10,7 +10,8 @@ ultimo_id = 0
 
 @app.route('/')
 def home():
-    return f"SISTEMA FOCUSMIND: ONLINE. <br>Esperando tarea del cel..."
+    # Mensaje de confirmación técnica
+    return "Servidor FocusMind listo. Usa la interfaz para interactuar."
 
 @app.route('/enviar_tarea', methods=['POST'])
 def enviar():
@@ -25,11 +26,7 @@ def enviar():
 
 @app.route('/obtener_tarea', methods=['GET'])
 def obtener():
-    return jsonify({
-        "tarea": ultima_tarea, 
-        "mins": ultimos_minutos, 
-        "id": ultimo_id
-    }), 200
+    return jsonify({"tarea": ultima_tarea, "mins": ultimos_minutos, "id": ultimo_id})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
