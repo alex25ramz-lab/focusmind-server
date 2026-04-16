@@ -4,97 +4,145 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# --- INTERFAZ CON EL VERDE NEÓN QUE TE GUSTA ---
-INTERFAZ_NEON = """
+# --- INTERFAZ AVANZADA CON EFECTOS VISUALES ---
+INTERFAZ_AVANZADA = """
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FocusMind</title>
+    <title>FocusMind OS</title>
     <style>
+        :root { --neon-green: #00ffaa; --dark-bg: #050505; }
+        
         body { 
-            background-color: #000; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            height: 100vh; 
-            margin: 0; 
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--dark-bg); 
+            display: flex; justify-content: center; align-items: center; 
+            height: 100vh; margin: 0; font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
         }
+
+        /* Contenedor con animación de pulso */
         .card {
-            background-color: #000;
-            border: 2px solid #00ffaa; /* Verde Neón */
-            border-radius: 25px;
-            padding: 40px 20px;
+            background-color: rgba(0, 0, 0, 0.9);
+            border: 2px solid var(--neon-green);
+            border-radius: 30px;
+            padding: 50px 25px;
             width: 320px;
             text-align: center;
-            box-shadow: 0 0 20px rgba(0, 255, 170, 0.3);
+            position: relative;
+            box-shadow: 0 0 20px rgba(0, 255, 170, 0.2);
+            animation: pulse 4s infinite;
         }
+
+        /* Línea de escaneo láser */
+        .card::after {
+            content: "";
+            position: absolute;
+            top: -100%; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to bottom, transparent, rgba(0, 255, 170, 0.1), transparent);
+            animation: scan 3s infinite linear;
+            pointer-events: none;
+        }
+
+        @keyframes scan {
+            0% { top: -100%; }
+            100% { top: 100%; }
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 15px rgba(0, 255, 170, 0.2); }
+            50% { box-shadow: 0 0 30px rgba(0, 255, 170, 0.5); border-color: #00ffcc; }
+        }
+
         h1 {
-            color: #00ffaa;
-            font-size: 32px;
-            letter-spacing: 2px;
+            color: var(--neon-green);
+            font-size: 35px;
+            letter-spacing: 4px;
             margin-bottom: 30px;
-            text-shadow: 0 0 10px #00ffaa, 0 0 20px #00ffaa;
-            font-weight: bold;
+            text-shadow: 0 0 15px var(--neon-green);
+            font-weight: 900;
         }
+
         input {
             width: 85%;
-            background-color: #fff;
-            border: none;
-            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 2px solid transparent;
+            border-radius: 15px;
             padding: 15px;
             margin-bottom: 20px;
             font-size: 16px;
-            color: #333;
-            outline: none;
-            text-align: center;
-        }
-        input::placeholder {
-            color: #888;
-        }
-        .btn-sincronizar {
-            width: 95%;
-            background-color: #00ffaa; /* Botón Verde Neón */
-            color: #000;
-            border: none;
-            border-radius: 12px;
-            padding: 15px;
-            font-size: 18px;
             font-weight: bold;
-            cursor: pointer;
-            box-shadow: 0 0 25px #00ffaa;
-            text-transform: uppercase;
-            margin-top: 10px;
+            color: #111;
+            outline: none;
             transition: 0.3s;
         }
+
+        input:focus {
+            border-color: var(--neon-green);
+            box-shadow: 0 0 10px var(--neon-green);
+            background: #fff;
+        }
+
+        .btn-sincronizar {
+            width: 95%;
+            background-color: var(--neon-green);
+            color: #000;
+            border: none;
+            border-radius: 15px;
+            padding: 18px;
+            font-size: 20px;
+            font-weight: 900;
+            cursor: pointer;
+            box-shadow: 0 0 20px var(--neon-green);
+            transition: 0.4s;
+            margin-top: 10px;
+        }
+
+        .btn-sincronizar:hover {
+            box-shadow: 0 0 40px var(--neon-green);
+            letter-spacing: 2px;
+        }
+
         .btn-sincronizar:active {
-            transform: scale(0.95);
-            box-shadow: 0 0 10px #00ffaa;
+            transform: scale(0.9);
+        }
+
+        .status-dot {
+            width: 10px; height: 10px; background: var(--neon-green);
+            border-radius: 50%; display: inline-block; margin-right: 10px;
+            box-shadow: 0 0 8px var(--neon-green);
         }
     </style>
 </head>
 <body>
     <div class="card">
+        <div style="color: var(--neon-green); font-size: 10px; margin-bottom: 10px;">
+            <span class="status-dot"></span> SYSTEM ONLINE
+        </div>
         <h1>FOCUSMIND</h1>
         
-        <input type="text" id="tarea" placeholder="¿QUÉ TIENES PENSADO PARA HOY?">
-        
+        <input type="text" id="tarea" placeholder="¿QUÉ TIENES PENSADO?">
         <input type="number" id="mins" placeholder="MINUTOS">
         
         <button class="btn-sincronizar" onclick="sincronizar()">SINCRONIZAR</button>
+        
+        <p style="color: #444; font-size: 9px; margin-top: 20px;">V.2.0 - MECATRÓNICA CORP</p>
     </div>
 
     <script>
         async function sincronizar() {
+            const btn = document.querySelector('.btn-sincronizar');
             const tarea = document.getElementById('tarea').value;
             const mins = document.getElementById('mins').value;
             
             if(!tarea || !mins) {
-                alert("Ingeniero, rellena ambos campos");
+                alert("ERROR: FALTAN DATOS");
                 return;
             }
+
+            btn.innerHTML = "CONECTANDO...";
+            btn.style.background = "#fff";
 
             try {
                 const res = await fetch('/enviar_tarea', {
@@ -103,10 +151,13 @@ INTERFAZ_NEON = """
                     body: JSON.stringify({ tarea: tarea, mins: parseInt(mins) })
                 });
                 if(res.ok) {
-                    alert("¡Sincronizado con éxito!");
+                    btn.innerHTML = "¡LISTO!";
+                    btn.style.background = "#00ffaa";
+                    setTimeout(() => { btn.innerHTML = "SINCRONIZAR"; }, 2000);
                 }
             } catch(e) {
-                alert("Error de conexión con Render");
+                alert("FALLA DE ENLACE");
+                btn.innerHTML = "REINTENTAR";
             }
         }
     </script>
@@ -120,7 +171,7 @@ ultimo_id = 0
 
 @app.route('/')
 def home():
-    return render_template_string(INTERFAZ_NEON)
+    return render_template_string(INTERFAZ_AVANZADA)
 
 @app.route('/enviar_tarea', methods=['POST'])
 def enviar():
