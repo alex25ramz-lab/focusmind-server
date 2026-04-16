@@ -1,61 +1,68 @@
-import time
-from flask import Flask, render_template_string, request, jsonify
+from flask import Flask, request, jsonify
+from datetime import datetime
 
 app = Flask(__name__)
 
-# Memoria volátil del servidor
-datos_tarea = {"tarea": "", "mins": "25", "id_envio": 0}
+# Base de datos temporal (Se limpia si el servidor de Render se reinicia)
+# Estructura: {"id": 1, "tarea": "Nombre", "mins": 25, "estado": "Pendiente", "fecha": "..."}
+historial_tareas = []
+ultimo_id = 0
 
-HTML_BASE = """
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FocusMind OS Server</title>
-    <style>
-        body { background-color: #000; color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .card { background-color: #0a0a0a; border: 2px solid #00ffff; border-radius: 25px; padding: 40px; width: 85%; max-width: 400px; text-align: center; box-shadow: 0 0 20px #00ffff44; }
-        h1 { color: #00ffff; letter-spacing: 5px; text-shadow: 0 0 10px #00ffff; }
-        input { width: 100%; padding: 15px; margin-bottom: 20px; border-radius: 12px; border: none; font-size: 16px; box-sizing: border-box; }
-        .btn-sincronizar { 
-            width: 100%; padding: 18px; background-color: #00ffff; color: #000; border: 2px solid #fff; 
-            border-radius: 12px; font-size: 18px; font-weight: bold; cursor: pointer;
-            box-shadow: 0 0 15px #00ffff; transition: 0.3s; text-transform: uppercase;
+@app.route('/enviar_tarea', methods=['POST'])
+def enviar_tarea():
+    global ultimo_id
+    data = request.json
+    tarea = data.get('tarea')
+    mins = data.get('mins', 25)
+    
+    if tarea:
+        ultimo_id += 1
+        nueva_entrada = {
+            "id": ultimo_id,
+            "tarea": tarea,
+            "mins": mins,
+            "estado": "Pendiente",
+            "fecha": datetime.now().strftime("%H:%M:%S")
         }
-        .btn-sincronizar:active { transform: scale(0.95); box-shadow: 0 0 5px #00ffff; }
-    </style>
-</head>
-<body>
-    <div class="card">
-        <h1>FOCUSMIND</h1>
-        <form action="/enviar" method="POST">
-            <input type="text" name="tarea" placeholder="¿QUÉ HARÁS?" required>
-            <input type="number" name="mins" placeholder="MINUTOS" value="25">
-            <button type="submit" class="btn-sincronizar">SINCRONIZAR</button>
-        </form>
-    </div>
-</body>
-</html>
-"""
+        # Insertar al inicio para que lo más nuevo salga primero
+        historial_tareas.insert(0, nueva_entrada)
+        
+        # Mantener solo las últimas 20 tareas para no saturar la memoria
+        if len(historial_tareas) > 20:
+            historial_tareas.pop()
+            
+        return jsonify({"status": "success", "tarea_id": ultimo_id}), 200
+    return jsonify({"status": "error", "message": "Falta el nombre de la tarea"}), 400
 
-@app.route('/')
-def index():
-    return render_template_string(HTML_BASE)
+@app.route('/obtener_tarea', methods=['GET'])
+def obtener_tarea():
+    # Retorna la tarea más reciente que esté pendiente para la PC
+    for t in historial_tareas:
+        if t["estado"] == "Pendiente":
+            return jsonify({
+                "tarea": t["tarea"],
+                "mins": t["mins"],
+                "id": t["id"]
+            }), 200
+    return jsonify({"tarea": None}), 200
 
-@app.route('/enviar', methods=['POST'])
-def enviar():
-    global datos_tarea
-    datos_tarea = {
-        "tarea": request.form.get("tarea"),
-        "mins": request.form.get("mins"),
-        "id_envio": time.time() # Esto es lo que "despierta" a la laptop
-    }
-    return render_template_string(HTML_BASE + "<script>alert('¡Sincronizado!'); window.location.href='/';</script>")
+@app.route('/historial', methods=['GET'])
+def obtener_historial():
+    # Esta es la ruta que usará tu celular para mostrar la lista
+    return jsonify(historial_tareas), 200
 
-@app.route('/get_tarea', methods=['GET'])
-def get_tarea():
-    return jsonify(datos_tarea)
+@app.route('/actualizar_estado', methods=['POST'])
+def actualizar_estado():
+    # Ruta para que la PC avise cuando terminó una tarea
+    data = request.json
+    t_id = data.get('id')
+    nuevo_estado = data.get('estado') # Ej: "Completada" o "Expirada"
+    
+    for t in historial_tareas:
+        if t["id"] == t_id:
+            t["estado"] = nuevo_estado
+            return jsonify({"status": "updated"}), 200
+    return jsonify({"status": "not_found"}), 404
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000)
