@@ -4,7 +4,7 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# --- INTERFAZ AVANZADA CON EFECTOS VISUALES ---
+# --- INTERFAZ AVANZADA CON AUTO-LIMPIEZA ---
 INTERFAZ_AVANZADA = """
 <!DOCTYPE html>
 <html lang="es">
@@ -18,11 +18,10 @@ INTERFAZ_AVANZADA = """
         body { 
             background-color: var(--dark-bg); 
             display: flex; justify-content: center; align-items: center; 
-            height: 100vh; margin: 0; font-family: 'Courier New', Courier, monospace;
+            height: 100vh; margin: 0; font-family: 'Segoe UI', sans-serif;
             overflow: hidden;
         }
 
-        /* Contenedor con animación de pulso */
         .card {
             background-color: rgba(0, 0, 0, 0.9);
             border: 2px solid var(--neon-green);
@@ -76,12 +75,7 @@ INTERFAZ_AVANZADA = """
             color: #111;
             outline: none;
             transition: 0.3s;
-        }
-
-        input:focus {
-            border-color: var(--neon-green);
-            box-shadow: 0 0 10px var(--neon-green);
-            background: #fff;
+            text-align: center;
         }
 
         .btn-sincronizar {
@@ -99,14 +93,7 @@ INTERFAZ_AVANZADA = """
             margin-top: 10px;
         }
 
-        .btn-sincronizar:hover {
-            box-shadow: 0 0 40px var(--neon-green);
-            letter-spacing: 2px;
-        }
-
-        .btn-sincronizar:active {
-            transform: scale(0.9);
-        }
+        .btn-sincronizar:active { transform: scale(0.9); }
 
         .status-dot {
             width: 10px; height: 10px; background: var(--neon-green);
@@ -127,33 +114,41 @@ INTERFAZ_AVANZADA = """
         
         <button class="btn-sincronizar" onclick="sincronizar()">SINCRONIZAR</button>
         
-        <p style="color: #444; font-size: 9px; margin-top: 20px;">V.2.0 - MECATRÓNICA CORP</p>
+        <p style="color: #444; font-size: 9px; margin-top: 20px;">V.2.1 - MECATRÓNICA CORP</p>
     </div>
 
     <script>
         async function sincronizar() {
             const btn = document.querySelector('.btn-sincronizar');
-            const tarea = document.getElementById('tarea').value;
-            const mins = document.getElementById('mins').value;
+            const inputTarea = document.getElementById('tarea');
+            const inputMins = document.getElementById('mins');
             
-            if(!tarea || !mins) {
+            if(!inputTarea.value || !inputMins.value) {
                 alert("ERROR: FALTAN DATOS");
                 return;
             }
 
-            btn.innerHTML = "CONECTANDO...";
-            btn.style.background = "#fff";
+            btn.innerHTML = "ENVIANDO...";
 
             try {
                 const res = await fetch('/enviar_tarea', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ tarea: tarea, mins: parseInt(mins) })
+                    body: JSON.stringify({ 
+                        tarea: inputTarea.value, 
+                        mins: parseInt(inputMins.value) 
+                    })
                 });
+                
                 if(res.ok) {
-                    btn.innerHTML = "¡LISTO!";
-                    btn.style.background = "#00ffaa";
-                    setTimeout(() => { btn.innerHTML = "SINCRONIZAR"; }, 2000);
+                    btn.innerHTML = "¡ENVIADO!";
+                    
+                    // --- AQUÍ ESTÁ EL TRUCO DE LA LIMPIEZA ---
+                    setTimeout(() => { 
+                        inputTarea.value = ""; // Borra la tarea
+                        inputMins.value = "";  // Borra los minutos
+                        btn.innerHTML = "SINCRONIZAR"; 
+                    }, 1500); 
                 }
             } catch(e) {
                 alert("FALLA DE ENLACE");
