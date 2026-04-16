@@ -4,42 +4,95 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# --- INTERFAZ NEÓN PERSONALIZADA ---
+# --- INTERFAZ EXACTA A TU IMAGEN ---
 INTERFAZ_NEON = """
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FocusMind</title>
     <style>
-        body { background-color: #000; color: #00ffcc; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; padding: 20px; }
-        .box { border: 2px solid #00ffcc; border-radius: 15px; padding: 20px; box-shadow: 0 0 20px #00ffcc; max-width: 320px; margin: auto; margin-top: 50px; background: rgba(0, 255, 204, 0.05); }
-        h1 { font-size: 28px; text-shadow: 0 0 15px #00ffcc; margin-bottom: 5px; }
-        p { font-weight: bold; letter-spacing: 1px; }
-        input { background: transparent; border: 1px solid #00ffcc; color: #fff; width: 85%; padding: 12px; margin: 15px 0; border-radius: 8px; text-align: center; outline: none; font-size: 16px; }
-        input::placeholder { color: rgba(0, 255, 204, 0.4); }
-        button { background: #00ffcc; color: #000; border: none; padding: 18px; border-radius: 8px; font-weight: bold; cursor: pointer; box-shadow: 0 0 15px #00ffcc; width: 95%; font-size: 16px; text-transform: uppercase; }
-        button:active { transform: scale(0.96); box-shadow: 0 0 5px #00ffcc; }
+        body { 
+            background-color: #000; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            margin: 0; 
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+        .card {
+            background-color: #000;
+            border: 2px solid #00f2ff;
+            border-radius: 25px;
+            padding: 40px 20px;
+            width: 320px;
+            text-align: center;
+            box-shadow: 0 0 15px rgba(0, 242, 255, 0.2);
+        }
+        h1 {
+            color: #00f2ff;
+            font-size: 32px;
+            letter-spacing: 2px;
+            margin-bottom: 30px;
+            text-shadow: 0 0 10px #00f2ff, 0 0 20px #00f2ff;
+            font-weight: bold;
+        }
+        input {
+            width: 85%;
+            background-color: #fff;
+            border: none;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+            font-size: 18px;
+            color: #333;
+            outline: none;
+        }
+        input::placeholder {
+            color: #aaa;
+        }
+        .btn-sincronizar {
+            width: 95%;
+            background-color: #00f2ff;
+            color: #000;
+            border: none;
+            border-radius: 12px;
+            padding: 15px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 0 20px #00f2ff;
+            text-transform: uppercase;
+            margin-top: 10px;
+        }
+        .btn-sincronizar:active {
+            transform: scale(0.98);
+            box-shadow: 0 0 10px #00f2ff;
+        }
     </style>
 </head>
 <body>
-    <div class="box">
+    <div class="card">
         <h1>FOCUSMIND</h1>
-        <p style="margin-top: 20px;">¿QUÉ TIENES PENSADO PARA HOY?</p>
-        <input type="text" id="tarea" placeholder="Escribe tu objetivo aquí...">
         
-        <p>TIEMPO ESTIMADO (MIN)</p>
-        <input type="number" id="mins" value="25">
+        <input type="text" id="tarea" placeholder="¿QUÉ TIENES PENSADO PARA HOY?">
         
-        <br><br>
-        <button onclick="sincronizar()">⚡ SINCRONIZAR CON PC ⚡</button>
+        <input type="number" id="mins" placeholder="MINUTOS">
+        
+        <button class="btn-sincronizar" onclick="sincronizar()">SINCRONIZAR</button>
     </div>
 
     <script>
         async function sincronizar() {
             const tarea = document.getElementById('tarea').value;
             const mins = document.getElementById('mins').value;
-            if(!tarea) return alert("¡Ingeniero, escribe una tarea primero!");
+            
+            if(!tarea || !mins) {
+                alert("Por favor rellena ambos campos");
+                return;
+            }
 
             try {
                 const res = await fetch('/enviar_tarea', {
@@ -47,18 +100,20 @@ INTERFAZ_NEON = """
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ tarea: tarea, mins: parseInt(mins) })
                 });
-                if(res.ok) alert("¡Enviado a la laptop con éxito!");
-                else alert("Error al conectar con el servidor");
-            } catch(e) { alert("El servidor no responde"); }
+                if(res.ok) {
+                    alert("¡Sincronizado!");
+                }
+            } catch(e) {
+                alert("Error de conexión");
+            }
         }
     </script>
 </body>
 </html>
 """
 
-# Variables de control para la PC
 ultima_tarea = "Ninguna"
-ultimos_minutos = 25
+ultimos_minutos = 0
 ultimo_id = 0
 
 @app.route('/')
@@ -70,8 +125,8 @@ def enviar():
     global ultima_tarea, ultimos_minutos, ultimo_id
     data = request.json
     if data:
-        ultima_tarea = data.get('tarea', 'Sin nombre')
-        ultimos_minutos = data.get('mins', 25)
+        ultima_tarea = data.get('tarea')
+        ultimos_minutos = data.get('mins')
         ultimo_id += 1
         return jsonify({"status": "ok"}), 200
     return jsonify({"status": "error"}), 400
