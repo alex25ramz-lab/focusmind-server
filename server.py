@@ -4,7 +4,7 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# --- INTERFAZ EXACTA A TU IMAGEN ---
+# --- INTERFAZ CON EL VERDE NEÓN QUE TE GUSTA ---
 INTERFAZ_NEON = """
 <!DOCTYPE html>
 <html lang="es">
@@ -24,19 +24,19 @@ INTERFAZ_NEON = """
         }
         .card {
             background-color: #000;
-            border: 2px solid #00f2ff;
+            border: 2px solid #00ffaa; /* Verde Neón */
             border-radius: 25px;
             padding: 40px 20px;
             width: 320px;
             text-align: center;
-            box-shadow: 0 0 15px rgba(0, 242, 255, 0.2);
+            box-shadow: 0 0 20px rgba(0, 255, 170, 0.3);
         }
         h1 {
-            color: #00f2ff;
+            color: #00ffaa;
             font-size: 32px;
             letter-spacing: 2px;
             margin-bottom: 30px;
-            text-shadow: 0 0 10px #00f2ff, 0 0 20px #00f2ff;
+            text-shadow: 0 0 10px #00ffaa, 0 0 20px #00ffaa;
             font-weight: bold;
         }
         input {
@@ -46,16 +46,17 @@ INTERFAZ_NEON = """
             border-radius: 12px;
             padding: 15px;
             margin-bottom: 20px;
-            font-size: 18px;
+            font-size: 16px;
             color: #333;
             outline: none;
+            text-align: center;
         }
         input::placeholder {
-            color: #aaa;
+            color: #888;
         }
         .btn-sincronizar {
             width: 95%;
-            background-color: #00f2ff;
+            background-color: #00ffaa; /* Botón Verde Neón */
             color: #000;
             border: none;
             border-radius: 12px;
@@ -63,13 +64,14 @@ INTERFAZ_NEON = """
             font-size: 18px;
             font-weight: bold;
             cursor: pointer;
-            box-shadow: 0 0 20px #00f2ff;
+            box-shadow: 0 0 25px #00ffaa;
             text-transform: uppercase;
             margin-top: 10px;
+            transition: 0.3s;
         }
         .btn-sincronizar:active {
-            transform: scale(0.98);
-            box-shadow: 0 0 10px #00f2ff;
+            transform: scale(0.95);
+            box-shadow: 0 0 10px #00ffaa;
         }
     </style>
 </head>
@@ -90,7 +92,7 @@ INTERFAZ_NEON = """
             const mins = document.getElementById('mins').value;
             
             if(!tarea || !mins) {
-                alert("Por favor rellena ambos campos");
+                alert("Ingeniero, rellena ambos campos");
                 return;
             }
 
@@ -101,10 +103,10 @@ INTERFAZ_NEON = """
                     body: JSON.stringify({ tarea: tarea, mins: parseInt(mins) })
                 });
                 if(res.ok) {
-                    alert("¡Sincronizado!");
+                    alert("¡Sincronizado con éxito!");
                 }
             } catch(e) {
-                alert("Error de conexión");
+                alert("Error de conexión con Render");
             }
         }
     </script>
