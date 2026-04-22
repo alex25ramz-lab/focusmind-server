@@ -4,7 +4,7 @@ import os
 
 app = Flask(__name__)
 
-# Base de datos en memoria (Se reinicia al apagar el servidor en Render)
+# Base de datos en memoria
 db = {
     "tarea_actual": "Esperando mando...",
     "tiempo_actual": 0,
@@ -13,7 +13,7 @@ db = {
     "rendimiento": {"exitos": 0, "retrasos": 0, "total": 0}
 }
 
-# --- INTERFAZ NEÓN CON AUTO-REFRESH ---
+# --- INTERFAZ NEÓN (CORREGIDA PARA LOS BADGES DE LA IMAGEN) ---
 HTML_PANEL = """
 <!DOCTYPE html>
 <html lang="es">
@@ -37,8 +37,8 @@ HTML_PANEL = """
         td { padding: 15px 5px; border-bottom: 1px solid #1a1a1a; }
         .badge { padding: 5px 10px; border-radius: 6px; font-size: 10px; font-weight: bold; text-transform: uppercase; border: 1px solid transparent; }
         .hecho { border-color: var(--neon); color: var(--neon); background: rgba(0, 255, 170, 0.1); }
-        .retraso { border-color: #ff4444; color: #ff4444; background: rgba(255, 68, 68, 0.1); }
-        .pendiente { border-color: #555; color: #555; }
+        .retraso { border-color: #666; color: #999; background: rgba(255, 255, 255, 0.05); } /* Color grisáceo como en tu imagen */
+        .pendiente { border-color: #333; color: #555; }
     </style>
 </head>
 <body>
@@ -57,7 +57,7 @@ HTML_PANEL = """
             <div class="stats">
                 <div class="stat-box"><span class="stat-num">{{ rendimiento.total }}</span><span class="stat-label">Total</span></div>
                 <div class="stat-box"><span class="stat-num">{{ rendimiento.exitos }}</span><span class="stat-label">Éxitos</span></div>
-                <div class="stat-box" style="color:#ff4444;"><span class="stat-num" style="color:#ff4444;">{{ rendimiento.retrasos }}</span><span class="stat-label">Retrasos / Exp</span></div>
+                <div class="stat-box"><span class="stat-num" style="color:#ff4444;">{{ rendimiento.retrasos }}</span><span class="stat-label">Retrasos / Exp</span></div>
             </div>
         </div>
         <div class="card">
@@ -70,7 +70,7 @@ HTML_PANEL = """
                         <div style="color:#444; font-size:11px;">{{ item.hora }}</div>
                     </td>
                     <td style="text-align:right;">
-                        <span class="badge {{ 'hecho' if item.estado == 'HECHO' else 'retraso' if item.estado in ['RETARDO', 'EXPIRADA'] else 'pendiente' }}">
+                        <span class="badge {{ 'hecho' if item.estado == 'HECHO' else 'retraso' if 'RETARDO' in item.estado or 'EXPIRADA' in item.estado else 'pendiente' }}">
                             {{ item.estado }}
                         </span>
                     </td>
@@ -79,17 +79,13 @@ HTML_PANEL = """
             </table>
         </div>
     </div>
-
     <script>
-        // Monitoreo de cambios para refrescar la UI automáticamente
         let hashEstado = "{{ historial|length }}-{{ rendimiento.exitos }}-{{ rendimiento.retrasos }}";
         setInterval(async () => {
             try {
                 const res = await fetch('/verificar_cambios');
                 const data = await res.json();
-                if (data.hash != hashEstado) {
-                    window.location.reload();
-                }
+                if (data.hash != hashEstado) window.location.reload();
             } catch (e) {}
         }, 3000);
     </script>
@@ -97,15 +93,12 @@ HTML_PANEL = """
 </html>
 """
 
-# --- RUTAS DE LA API ---
-
 @app.route('/')
 def home():
     return render_template_string(HTML_PANEL, historial=db['historial'], rendimiento=db['rendimiento'])
 
 @app.route('/verificar_cambios')
 def verificar_cambios():
-    # Creamos un hash simple para saber si algo cambió en la DB
     hash_actual = f"{len(db['historial'])}-{db['rendimiento']['exitos']}-{db['rendimiento']['retrasos']}"
     return jsonify({"hash": hash_actual})
 
@@ -115,40 +108,29 @@ def enviar_tarea_web():
     mins = request.form.get('mins')
     db['id_envio'] += 1
     db['tarea_actual'], db['tiempo_actual'] = tarea, mins
-    db['historial'].append({
-        "id": db['id_envio'], 
-        "tarea": tarea, 
-        "estado": "PENDIENTE", 
-        "hora": datetime.now().strftime("%H:%M")
-    })
+    db['historial'].append({"id": db['id_envio'], "tarea": tarea, "estado": "PENDIENTE", "hora": datetime.now().strftime("%H:%M")})
     db['rendimiento']['total'] += 1
     return '<script>window.location.href="/";</script>'
 
 @app.route('/get_data')
 def get_data():
-    """Ruta que consulta la App FocusMind (Python local)"""
-    return jsonify({
-        "tarea": db['tarea_actual'], 
-        "tiempo": db['tiempo_actual'], 
-        "id": db['id_envio']
-    })
+    return jsonify({"tarea": db['tarea_actual'], "tiempo": db['tiempo_actual'], "id": db['id_envio']})
 
 @app.route('/reportar_progreso', methods=['POST'])
 def reportar_progreso():
-    """Ruta donde la App reporta el resultado final"""
     data = request.json
     id_tarea = data.get('id')
-    nuevo_estado = data.get('estado') # Esperamos: 'HECHO', 'RETARDO' o 'EXPIRADA'
+    nuevo_estado = data.get('estado').upper() # Convertimos a mayúsculas para evitar errores
     
     for t in db['historial']:
-        if t['id'] == id_tarea:
-            if t['estado'] == "PENDIENTE":
-                t['estado'] = nuevo_estado
-                # Lógica corregida de contadores
-                if nuevo_estado == "HECHO":
-                    db['rendimiento']['exitos'] += 1
-                elif nuevo_estado in ["RETARDO", "EXPIRADA"]:
-                    db['rendimiento']['retrasos'] += 1
+        if t['id'] == id_tarea and t['estado'] == "PENDIENTE":
+            t['estado'] = nuevo_estado
+            
+            # --- CORRECCIÓN CLAVE: Búsqueda flexible ---
+            if nuevo_estado == "HECHO":
+                db['rendimiento']['exitos'] += 1
+            elif "RETARDO" in nuevo_estado or "EXPIRADA" in nuevo_estado or "RETRASO" in nuevo_estado:
+                db['rendimiento']['retrasos'] += 1
             break
     return jsonify({"status": "OK"})
 
