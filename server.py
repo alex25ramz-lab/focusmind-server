@@ -21,8 +21,7 @@ def inicializar_perfil(nombre):
     }
 
 def cargar_db():
-    # El operador maestro tiene esta clave por defecto.
-    # Cámbiala aquí para mayor seguridad.
+    # Cuenta maestra por defecto
     cuentas_maestras = {
         "operador1": {"password": "123", "datos": inicializar_perfil("Operador 1")}
     }
@@ -54,7 +53,7 @@ HTML_AUTH = """
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8"><title>LUMINA OS - Auth</title>
+    <meta charset="UTF-8"><title>LUMINA OS - Acceso</title>
     <style>
         :root { --neon: #00ffaa; --bg: #050505; }
         body { background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
@@ -64,7 +63,7 @@ HTML_AUTH = """
         input:focus { border-color: var(--neon); }
         button { width: 100%; padding: 12px; background: var(--neon); color: black; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; margin-top: 15px; text-transform: uppercase; }
         .error { color: #ff4444; font-size: 11px; margin-top: 15px; font-weight: bold; }
-        .switch { font-size: 10px; margin-top: 20px; color: #555; text-decoration: none; display: block; }
+        .toggle-link { color: #555; font-size: 11px; margin-top: 20px; display: block; text-decoration: none; }
     </style>
 </head>
 <body>
@@ -72,15 +71,15 @@ HTML_AUTH = """
         <h1>LUMINA OS</h1>
         <form method="POST">
             <input type="text" name="usuario" placeholder="IDENTIFICADOR" required autofocus>
-            <input type="password" name="password" placeholder="CONTRASEÑA" required>
-            <button type="submit">{{ 'CREAR CUENTA' if modo == 'registro' else 'INICIAR SESIÓN' }}</button>
+            <input type="password" name="password" placeholder="CONTRASEÑA / CÓDIGO" required>
+            <button type="submit">{{ 'CREAR CUENTA' if modo == 'registro' else 'ENTRAR AL SISTEMA' }}</button>
         </form>
         {% if error %}<div class="error">{{ error }}</div>{% endif %}
         
         {% if modo == 'login' %}
-            <a href="/registro" class="switch">¿No tienes cuenta? REGÍSTRATE</a>
+            <a href="/registro" class="toggle-link">¿No tienes cuenta? Regístrate aquí</a>
         {% else %}
-            <a href="/login" class="switch">¿Ya eres operador? LOGIN</a>
+            <a href="/login" class="toggle-link">¿Ya tienes cuenta? Inicia sesión</a>
         {% endif %}
     </div>
 </body>
@@ -95,60 +94,49 @@ HTML_PANEL = """
     <style>
         :root { --neon: #00ffaa; --bg: #050505; --card: #0d0d0d; --red: #ff4444; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: white; padding: 20px; }
-        .container { max-width: 600px; margin: auto; }
-        .user-bar { display: flex; justify-content: space-between; font-size: 10px; color: var(--neon); margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px; }
+        .container { max-width: 550px; margin: auto; }
+        .user-bar { display: flex; justify-content: space-between; font-size: 10px; color: var(--neon); margin-bottom: 15px; text-transform: uppercase; }
         h1 { color: var(--neon); text-align: center; letter-spacing: 5px; text-shadow: 0 0 10px var(--neon); }
         .console { background: rgba(0,255,170,0.05); border-left: 3px solid var(--neon); padding: 15px; margin-bottom: 20px; font-family: monospace; color: var(--neon); min-height: 40px; }
-        .card { background: var(--card); border: 1px solid #222; border-radius: 15px; padding: 20px; margin-bottom: 20px; position: relative; }
+        .card { background: var(--card); border: 1px solid #222; border-radius: 15px; padding: 20px; margin-bottom: 20px; }
         input, select { width: 100%; padding: 12px; margin: 5px 0 15px 0; border-radius: 8px; border: 1px solid #333; background: #000; color: white; box-sizing: border-box; outline: none; }
-        .main-btn { width: 100%; padding: 15px; border-radius: 10px; background: var(--neon); color: black; font-weight: bold; border: none; cursor: pointer; text-transform: uppercase; transition: 0.3s; }
-        .main-btn:hover { box-shadow: 0 0 15px var(--neon); }
+        .main-btn { width: 100%; padding: 15px; border-radius: 10px; background: var(--neon); color: black; font-weight: bold; border: none; cursor: pointer; text-transform: uppercase; }
         table { width: 100%; margin-top: 10px; font-size: 12px; border-collapse: collapse; }
         td { padding: 12px 5px; border-bottom: 1px solid #222; }
-        .badge-ok { color: var(--neon); font-weight: bold; font-size: 14px; }
-        .del-btn { color: var(--red); text-decoration: none; font-size: 10px; border: 1px solid var(--red); padding: 4px 8px; border-radius: 4px; transition: 0.3s; }
-        .del-btn:hover { background: var(--red); color: white; }
+        .badge-ok { color: var(--neon); font-weight: bold; font-size: 15px; }
+        .del-btn { color: var(--red); text-decoration: none; font-size: 10px; border: 1px solid var(--red); padding: 2px 5px; border-radius: 4px; }
         .label-neon { font-size: 10px; color: var(--neon); text-transform: uppercase; display: block; margin-bottom: 5px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="user-bar">
-            <span>OPERADOR: {{ usuario }}</span>
-            <a href="/logout" style="color:var(--red); text-decoration:none;">[ CERRAR SISTEMA ]</a>
-        </div>
+        <div class="user-bar"><span>OPERADOR: {{ usuario }}</span> <a href="/logout" style="color:var(--red); text-decoration:none;">[ DESCONECTAR ]</a></div>
         <h1>LUMINA OS</h1>
         <div class="console">> STATUS: {{ ultimo_msj }}</div>
 
-        {% if usuario == 'operador1' %}
         <div class="card">
-            <span class="label-neon">CENTRO DE MANDO (ADMIN)</span>
             <form action="/enviar_tarea_web" method="POST">
+                <span class="label-neon">Frecuencia de Mando:</span>
                 <select name="destinatario">
                     {% for user in lista_usuarios %}
-                        <option value="{{ user }}">{{ user }}</option>
+                        <option value="{{ user }}" {% if user == usuario %}selected{% endif %}>
+                            {{ user }} {% if user == usuario %}(TI){% endif %}
+                        </option>
                     {% endfor %}
                 </select>
-                <input type="text" name="tarea" placeholder="Misión / Objetivo de Ingeniería" required>
+                <input type="text" name="tarea" placeholder="Misión / Objetivo" required>
                 <input type="number" name="mins" placeholder="Minutos" required>
                 <button type="submit" class="main-btn">Transmitir Instrucción</button>
             </form>
         </div>
-        {% else %}
-        <div class="card">
-            <span class="label-neon">MI MISIÓN ACTUAL</span>
-            <div style="font-size: 18px; margin: 10px 0;">{{ tarea_actual }}</div>
-            <div style="color: #555; font-size: 12px;">Tiempo restante: {{ tiempo_actual }} mins</div>
-        </div>
-        {% endif %}
 
         <div class="card">
-            <span class="label-neon">Telemetría de Unidades</span>
+            <span class="label-neon">Telemetría de Equipo</span>
             <table>
                 <tr style="color:#555; font-size:9px;">
-                    <td>ID UNIDAD</td>
-                    <td>ESTADO</td>
-                    <td style="text-align:center;">ÉXITOS</td>
+                    <td>ID</td>
+                    <td>ACTIVIDAD</td>
+                    <td style="text-align:center;">EXITOS</td>
                     <td style="text-align:right;">CONTROL</td>
                 </tr>
                 {% for op_name, op_info in equipo.items() %}
@@ -158,7 +146,7 @@ HTML_PANEL = """
                     <td style="text-align:center;" class="badge-ok">{{ op_info.datos.rendimiento.exitos }}</td>
                     <td style="text-align:right;">
                         {% if usuario == 'operador1' and op_name != 'operador1' %}
-                            <a href="/eliminar_operador/{{ op_name }}" class="del-btn" onclick="return confirm('¿Eliminar unidad de la red?')">BORRAR</a>
+                            <a href="/eliminar_operador/{{ op_name }}" class="del-btn" onclick="return confirm('¿Eliminar unidad?')">BORRAR</a>
                         {% endif %}
                     </td>
                 </tr>
@@ -167,7 +155,6 @@ HTML_PANEL = """
         </div>
     </div>
     <script>
-        // Recarga automática si hay cambios en el servidor
         setInterval(async () => {
             try {
                 const r = await fetch('/verificar_cambios');
@@ -180,7 +167,7 @@ HTML_PANEL = """
 </html>
 """
 
-# --- CONTROLADORES ---
+# --- RUTAS ---
 
 @app.route('/registro', methods=['GET', 'POST'])
 def registro():
@@ -189,13 +176,14 @@ def registro():
         p = request.form.get('password').strip()
         
         if u in usuarios_db:
-            return render_template_string(HTML_AUTH, modo='registro', error="EL IDENTIFICADOR YA EXISTE")
+            return render_template_string(HTML_AUTH, modo='registro', error="EL USUARIO YA EXISTE")
         
-        # Crear usuario con su password y perfil
+        # Crear nueva cuenta con la contraseña elegida
         usuarios_db[u] = {"password": p, "datos": inicializar_perfil(u)}
         guardar_db(usuarios_db)
         session['user'] = u
         return redirect(url_for('home'))
+        
     return render_template_string(HTML_AUTH, modo='registro')
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -208,7 +196,8 @@ def login():
             session['user'] = u
             return redirect(url_for('home'))
         else:
-            return render_template_string(HTML_AUTH, modo='login', error="CREDENCIALES INVÁLIDAS")
+            return render_template_string(HTML_AUTH, modo='login', error="DATOS INCORRECTOS")
+            
     return render_template_string(HTML_AUTH, modo='login')
 
 @app.route('/')
@@ -216,25 +205,15 @@ def home():
     if 'user' not in session: return redirect(url_for('login'))
     user = session['user']
     if user not in usuarios_db: return redirect(url_for('logout'))
-    
     return render_template_string(HTML_PANEL, 
                                 usuario=user, 
                                 lista_usuarios=list(usuarios_db.keys()),
                                 equipo=usuarios_db,
                                 **usuarios_db[user]['datos'])
 
-@app.route('/eliminar_operador/<nombre>')
-def eliminar_operador(nombre):
-    if session.get('user') == 'operador1':
-        if nombre in usuarios_db and nombre != 'operador1':
-            del usuarios_db[nombre]
-            guardar_db(usuarios_db)
-    return redirect(url_for('home'))
-
 @app.route('/enviar_tarea_web', methods=['POST'])
 def enviar_tarea_web():
-    if session.get('user') != 'operador1': return redirect(url_for('home'))
-    
+    if 'user' not in session: return redirect(url_for('login'))
     dest = request.form.get('destinatario')
     if dest in usuarios_db:
         db = usuarios_db[dest]['datos']
@@ -246,18 +225,37 @@ def enviar_tarea_web():
         guardar_db(usuarios_db)
     return redirect(url_for('home'))
 
-# --- API PARA HARDWARE EXTERNO (LAPTOP/ESP32) ---
+@app.route('/eliminar_operador/<nombre>')
+def eliminar_operador(nombre):
+    if session.get('user') == 'operador1':
+        if nombre in usuarios_db and nombre != 'operador1':
+            del usuarios_db[nombre]
+            guardar_db(usuarios_db)
+    return redirect(url_for('home'))
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+@app.route('/verificar_cambios')
+def verificar_cambios():
+    if 'user' not in session: return jsonify({"update": False})
+    # Detectar cambios en la base de datos para refrescar la web
+    estado_equipo = "-".join([f"{u}:{usuarios_db[u]['datos']['id_envio']}" for u in usuarios_db])
+    if session.get('last_state') != estado_equipo:
+        session['last_state'] = estado_equipo
+        return jsonify({"update": True})
+    return jsonify({"update": False})
+
+# --- API PARA LA LAPTOP ---
 
 @app.route('/get_data')
 def get_data():
     user = request.args.get('user')
     if user in usuarios_db:
         db = usuarios_db[user]['datos']
-        return jsonify({
-            "tarea": db['tarea_actual'], 
-            "tiempo": db['tiempo_actual'], 
-            "id": db['id_envio']
-        })
+        return jsonify({"tarea": db['tarea_actual'], "tiempo": db['tiempo_actual'], "id": db['id_envio']})
     return jsonify({"error": "No user"}), 404
 
 @app.route('/reportar_progreso', methods=['POST'])
@@ -275,22 +273,6 @@ def reportar():
         return jsonify({"ok": True})
     return jsonify({"ok": False}), 400
 
-@app.route('/verificar_cambios')
-def verificar_cambios():
-    if 'user' not in session: return jsonify({"update": False})
-    # Detecta cambios en cualquier parte de la red para actualizar la vista
-    estado_equipo = "-".join([f"{u}:{usuarios_db[u]['datos']['rendimiento']['exitos']}:{usuarios_db[u]['datos']['tarea_actual']}" for u in usuarios_db])
-    if session.get('last_state') != estado_equipo:
-        session['last_state'] = estado_equipo
-        return jsonify({"update": True})
-    return jsonify({"update": False})
-
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect(url_for('login'))
-
 if __name__ == '__main__':
-    # Configuración para despliegue
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
