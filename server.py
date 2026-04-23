@@ -21,11 +21,10 @@ def inicializar_perfil(nombre):
     }
 
 def cargar_db():
-    # --- CONFIGURACIÓN DE CUENTAS MAESTRAS ---
+    # Cuentas que NO se pueden borrar y siempre se restauran si el archivo se daña
     cuentas_maestras = {
         "operador1": {"password": "123", "datos": inicializar_perfil("Operador 1")},
-        "compa": {"password": "456", "datos": inicializar_perfil("Compa")},
-        "ingeniero_x": {"password": "789", "datos": inicializar_perfil("Ingeniero X")}
+        "compa": {"password": "456", "datos": inicializar_perfil("Compa")}
     }
 
     if not os.path.exists(DB_FILE):
@@ -34,6 +33,7 @@ def cargar_db():
     with open(DB_FILE, "r") as f:
         try: 
             data = json.load(f)
+            # Asegurar que las maestras siempre estén presentes
             for user, info in cuentas_maestras.items():
                 if user not in data:
                     data[user] = info
@@ -98,13 +98,13 @@ HTML_PANEL = """
 <head>
     <meta charset="UTF-8"><title>LUMINA OS - Panel</title>
     <style>
-        :root { --neon: #00ffaa; --bg: #050505; --card: #0d0d0d; }
+        :root { --neon: #00ffaa; --bg: #050505; --card: #0d0d0d; --red: #ff4444; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: white; padding: 20px; }
         .container { max-width: 550px; margin: auto; }
         .user-bar { display: flex; justify-content: space-between; font-size: 10px; color: var(--neon); margin-bottom: 15px; text-transform: uppercase; }
         h1 { color: var(--neon); text-align: center; letter-spacing: 5px; text-shadow: 0 0 10px var(--neon); }
         .console { background: rgba(0,255,170,0.05); border-left: 3px solid var(--neon); padding: 15px; margin-bottom: 20px; font-family: monospace; color: var(--neon); min-height: 40px; }
-        .card { background: var(--card); border: 1px solid #222; border-radius: 15px; padding: 20px; margin-bottom: 20px; }
+        .card { background: var(--card); border: 1px solid #222; border-radius: 15px; padding: 20px; margin-bottom: 20px; position: relative; }
         input, select { width: 100%; padding: 12px; margin: 5px 0 15px 0; border-radius: 8px; border: 1px solid #333; background: #000; color: white; box-sizing: border-box; outline: none; }
         input:focus, select:focus { border-color: var(--neon); }
         .main-btn { width: 100%; padding: 15px; border-radius: 10px; background: var(--neon); color: black; font-weight: bold; border: none; cursor: pointer; box-shadow: 0 0 10px var(--neon); text-transform: uppercase; }
@@ -112,32 +112,29 @@ HTML_PANEL = """
         .stat-num { display: block; font-size: 24px; color: var(--neon); font-weight: bold; }
         .stat-label { font-size: 9px; color: #666; text-transform: uppercase; }
         table { width: 100%; margin-top: 10px; font-size: 12px; border-collapse: collapse; }
-        td { padding: 8px 5px; border-bottom: 1px solid #222; }
+        td { padding: 12px 5px; border-bottom: 1px solid #222; }
         .badge { padding: 3px 7px; border-radius: 4px; font-size: 10px; border: 1px solid; text-transform: uppercase; }
-        .hecho { color: var(--neon); border-color: var(--neon); }
-        .retraso { color: #ff4444; border-color: #ff4444; }
-        .pendiente { color: #888; border-color: #444; }
         .label-neon { font-size: 10px; color: var(--neon); text-transform: uppercase; display: block; margin-bottom: 5px; }
+        .del-btn { color: var(--red); text-decoration: none; font-size: 10px; border: 1px solid var(--red); padding: 2px 5px; border-radius: 4px; transition: 0.3s; }
+        .del-btn:hover { background: var(--red); color: white; }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="user-bar"><span>OPERADOR ACTUAL: {{ usuario }}</span> <a href="/logout" style="color:#ff4444; text-decoration:none;">[ DESCONECTAR ]</a></div>
+        <div class="user-bar"><span>ID: {{ usuario }}</span> <a href="/logout" style="color:var(--red); text-decoration:none;">[ SALIR ]</a></div>
         <h1>LUMINA OS</h1>
         <div class="console" id="msj-texto">> LUMINA: {{ ultimo_msj }}</div>
 
         <div class="card">
             <form action="/enviar_tarea_web" method="POST">
-                <span class="label-neon">Asignar Misión A:</span>
-                <select name="destinatario" required>
+                <span class="label-neon">Asignar a:</span>
+                <select name="destinatario">
                     {% for user in lista_usuarios %}
                         <option value="{{ user }}" {% if user == usuario %}selected{% endif %}>{{ user | upper }}</option>
                     {% endfor %}
                 </select>
-                
-                <span class="label-neon">Detalles del Objetivo:</span>
-                <input type="text" name="tarea" placeholder="Ej: Análisis de Circuitos II" required>
-                <input type="number" name="mins" placeholder="Tiempo Estimado (Minutos)" required>
+                <input type="text" name="tarea" placeholder="Misión / Objetivo" required>
+                <input type="number" name="mins" placeholder="Minutos" required>
                 <button type="submit" class="main-btn">Desplegar Actividad</button>
             </form>
         </div>
@@ -145,7 +142,7 @@ HTML_PANEL = """
         <div class="card stats">
             <div><span class="stat-num">{{ rendimiento.total }}</span><span class="stat-label">Total</span></div>
             <div><span class="stat-num">{{ rendimiento.exitos }}</span><span class="stat-label">Éxitos</span></div>
-            <div><span class="stat-num" style="color:#ff4444;">{{ rendimiento.retrasos }}</span><span class="stat-label">Retrasos</span></div>
+            <div><span class="stat-num" style="color:var(--red);">{{ rendimiento.retrasos }}</span><span class="stat-label">Retrasos</span></div>
         </div>
 
         <div class="card">
@@ -153,15 +150,19 @@ HTML_PANEL = """
             <table>
                 <tr style="color:#555; font-size:9px;">
                     <td>OPERADOR</td>
-                    <td>ACTIVIDAD ACTUAL</td>
-                    <td style="text-align:right;">ESTADO</td>
+                    <td>ACTIVIDAD</td>
+                    <td style="text-align:right;">ACCIONES</td>
                 </tr>
                 {% for op_name, op_info in equipo.items() %}
                 <tr>
                     <td style="color:var(--neon);">{{ op_name }}</td>
-                    <td>{{ op_info.datos.tarea_actual }}</td>
+                    <td style="font-size:11px;">{{ op_info.datos.tarea_actual }}</td>
                     <td style="text-align:right;">
-                        <span class="badge" style="border:none; color:#555;">{{ op_info.datos.rendimiento.exitos }} OK</span>
+                        {% if usuario == 'operador1' and op_name != 'operador1' %}
+                            <a href="/eliminar_operador/{{ op_name }}" class="del-btn" onclick="return confirm('¿Eliminar operador?')">ELIMINAR</a>
+                        {% else %}
+                            <span style="color:#333; font-size:9px;">ACTIVO</span>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -191,12 +192,12 @@ HTML_PANEL = """
 </html>
 """
 
-# --- RUTAS ---
+# --- RUTAS DE SISTEMA ---
 
 @app.route('/registro', methods=['GET', 'POST'])
 def registro():
     if request.method == 'POST':
-        u, p = request.form.get('usuario').strip(), request.form.get('password').strip()
+        u, p = request.form.get('usuario').strip().lower(), request.form.get('password').strip()
         if u in usuarios_db: return render_template_string(HTML_AUTH, modo='registro', error="ID ya existe")
         usuarios_db[u] = {"password": p, "datos": inicializar_perfil(u)}
         guardar_db(usuarios_db)
@@ -206,13 +207,13 @@ def registro():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        u, p = request.form.get('usuario').strip(), request.form.get('password').strip()
+        u, p = request.form.get('usuario').strip().lower(), request.form.get('password').strip()
         if u in usuarios_db and usuarios_db[u]['password'] == p:
             session['user'] = u
             db = usuarios_db[u]['datos']
             session['last_state'] = f"{len(db['historial'])}-{db['rendimiento']['exitos']}"
             return redirect(url_for('home'))
-        return render_template_string(HTML_AUTH, modo='login', error="Credenciales inválidas")
+        return render_template_string(HTML_AUTH, modo='login', error="Datos de acceso incorrectos")
     return render_template_string(HTML_AUTH, modo='login')
 
 @app.route('/logout')
@@ -224,16 +225,26 @@ def logout():
 def home():
     if 'user' not in session: return redirect(url_for('login'))
     user = session['user']
+    if user not in usuarios_db: return redirect(url_for('logout'))
     return render_template_string(HTML_PANEL, 
                                 usuario=user, 
                                 lista_usuarios=list(usuarios_db.keys()),
                                 equipo=usuarios_db,
                                 **usuarios_db[user]['datos'])
 
+# --- GESTIÓN DE EQUIPO ---
+
+@app.route('/eliminar_operador/<nombre>')
+def eliminar_operador(nombre):
+    if session.get('user') == 'operador1': # Solo tú puedes borrar
+        if nombre in usuarios_db and nombre != 'operador1':
+            del usuarios_db[nombre]
+            guardar_db(usuarios_db)
+    return redirect(url_for('home'))
+
 @app.route('/enviar_tarea_web', methods=['POST'])
 def enviar_tarea_web():
     if 'user' not in session: return redirect(url_for('login'))
-    
     dest = request.form.get('destinatario')
     if dest in usuarios_db:
         db = usuarios_db[dest]['datos']
@@ -248,6 +259,8 @@ def enviar_tarea_web():
         db['rendimiento']['total'] += 1
         guardar_db(usuarios_db)
     return redirect(url_for('home'))
+
+# --- API PARA LAPTOPS Y SINCRONIZACIÓN ---
 
 @app.route('/get_data')
 def get_data():
@@ -268,10 +281,10 @@ def reportar():
                 t['estado'] = data.get('estado', '').upper()
                 if t['estado'] == "HECHO":
                     db['rendimiento']['exitos'] += 1
-                    db['ultimo_msj'] = f"Operador {user}: Objetivo neutralizado."
+                    db['ultimo_msj'] = f"Operador {user}: Tarea completada."
                 else:
                     db['rendimiento']['retrasos'] += 1
-                    db['ultimo_msj'] = f"Operador {user}: Alerta de retraso."
+                    db['ultimo_msj'] = f"Operador {user}: Se ha registrado un retraso."
                 guardar_db(usuarios_db)
                 return jsonify({"ok": True})
     return jsonify({"ok": False}), 400
@@ -280,8 +293,8 @@ def reportar():
 def verificar_cambios():
     if 'user' not in session: return jsonify({"update": False})
     user = session['user']
+    if user not in usuarios_db: return jsonify({"update": True}) # Forzar recarga si el usuario fue borrado
     db = usuarios_db[user]['datos']
-    # Detectamos cambios si el historial crece o si alguien más nos manda una tarea
     estado_actual = f"{len(db['historial'])}-{db['rendimiento']['exitos']}-{db['tarea_actual']}"
     if session.get('last_state') != estado_actual:
         session['last_state'] = estado_actual
