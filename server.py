@@ -5,7 +5,7 @@ import random
 import json
 
 app = Flask(__name__)
-# Clave fija para que las sesiones no expiren al reiniciar el server
+# Clave fija para que las sesiones no expiren al reiniciar el servidor en Render
 app.secret_key = "lumina_proto_2026_key_ultra_secure"
 
 # --- SISTEMA DE PERSISTENCIA ROBUSTO ---
@@ -22,20 +22,21 @@ def inicializar_perfil(nombre):
     }
 
 def cargar_db():
-    # --- CONFIGURA AQUÍ TUS CUENTAS QUE NUNCA SE BORRAN ---
+    # --- CONFIGURACIÓN DE CUENTAS QUE NUNCA SE BORRAN ---
+    # Puedes agregar aquí los nombres de usuario de tus amigos
     cuentas_maestras = {
         "operador1": {"password": "123", "datos": inicializar_perfil("Operador 1")},
-        "compa": {"password": "456", "datos": inicializar_perfil("Compa")}
+        "compa": {"password": "456", "datos": inicializar_perfil("Compa")},
+        "ingeniero_x": {"password": "789", "datos": inicializar_perfil("Ingeniero X")}
     }
 
     if not os.path.exists(DB_FILE):
-        # Si el archivo no existe (reinicio de Render), regresamos las maestras
         return cuentas_maestras
     
     with open(DB_FILE, "r") as f:
         try: 
             data = json.load(f)
-            # Mezclamos: Si una cuenta maestra no está en el JSON, la agregamos
+            # Aseguramos que las cuentas maestras siempre existan en el archivo cargado
             for user, info in cuentas_maestras.items():
                 if user not in data:
                     data[user] = info
@@ -47,7 +48,7 @@ def guardar_db(db):
     with open(DB_FILE, "w") as f:
         json.dump(db, f, indent=4)
 
-# Carga inicial de datos combinada
+# Carga inicial de datos
 usuarios_db = cargar_db()
 
 FRASES_LUMINA = [
@@ -57,7 +58,7 @@ FRASES_LUMINA = [
     "Enfoque de ingeniería establecido. Adelante."
 ]
 
-# --- VISTAS HTML (Sin cambios en tu diseño original) ---
+# --- VISTAS HTML ---
 
 HTML_AUTH = """
 <!DOCTYPE html>
@@ -125,7 +126,6 @@ HTML_PANEL = """
     <div class="container">
         <div class="user-bar"><span>ID: {{ usuario }}</span> <a href="/logout" style="color:#ff4444; text-decoration:none;">[ SALIR ]</a></div>
         <h1>LUMINA OS</h1>
-        
         <div class="console" id="msj-texto">> LUMINA: {{ ultimo_msj }}</div>
 
         <div class="card">
@@ -201,7 +201,6 @@ def login():
     if request.method == 'POST':
         u = request.form.get('usuario').strip()
         p = request.form.get('password').strip()
-        # Verificar en la base de datos cargada (que incluye las maestras)
         if u in usuarios_db and usuarios_db[u]['password'] == p:
             session['user'] = u
             db = usuarios_db[u]['datos']
@@ -259,34 +258,41 @@ def verificar_cambios():
         return jsonify({"update": True})
     return jsonify({"update": False})
 
-# --- API LAPTOP ---
+# --- API PARA LAPTOPS (EL CEREBRO DEL SISTEMA) ---
 
 @app.route('/get_data')
 def get_data():
+    # El script de la laptop debe llamar a: server.com/get_data?user=nombre_usuario
     user = request.args.get('user')
-    if user in usuarios_db:
+    if user and user in usuarios_db:
         db = usuarios_db[user]['datos']
-        return jsonify({"tarea": db['tarea_actual'], "tiempo": db['tiempo_actual'], "id": db['id_envio']})
-    return jsonify({"error": "No user"}), 404
+        return jsonify({
+            "tarea": db['tarea_actual'], 
+            "tiempo": db['tiempo_actual'], 
+            "id": db['id_envio']
+        })
+    return jsonify({"error": "Usuario no encontrado o no proporcionado"}), 404
 
 @app.route('/reportar_progreso', methods=['POST'])
 def reportar():
     data = request.json
-    user = data.get('user')
-    if user in usuarios_db:
+    user = data.get('user') # La laptop envía quién es en el JSON
+    if user and user in usuarios_db:
         db = usuarios_db[user]['datos']
         for t in db['historial']:
+            # Solo actualizamos si el ID de tarea coincide y está pendiente
             if t['id'] == data.get('id') and t['estado'] == "PENDIENTE":
-                t['estado'] = data.get('estado').upper()
+                t['estado'] = data.get('estado', '').upper()
                 if t['estado'] == "HECHO":
                     db['rendimiento']['exitos'] += 1
-                    db['ultimo_msj'] = f"Objetivo de {user} completado con éxito."
+                    db['ultimo_msj'] = f"Operador {user}: Misión cumplida con éxito."
                 else:
                     db['rendimiento']['retrasos'] += 1
-                    db['ultimo_msj'] = f"Retraso detectado en la misión de {user}."
+                    db['ultimo_msj'] = f"Operador {user}: Se ha registrado un retraso."
                 guardar_db(usuarios_db)
                 return jsonify({"ok": True})
-    return jsonify({"ok": False}), 400
+        return jsonify({"ok": False, "error": "Tarea no encontrada o ya procesada"})
+    return jsonify({"ok": False, "error": "Usuario no reconocido"}), 400
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
