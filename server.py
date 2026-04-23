@@ -57,7 +57,7 @@ HTML_AUTH = """
         :root { --neon: #00ffaa; --bg: #050505; }
         body { background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
         .auth-card { background: #0d0d0d; padding: 40px; border-radius: 20px; border: 1px solid var(--neon); width: 340px; text-align: center; box-shadow: 0 0 20px rgba(0,255,170,0.15); }
-        h1 { color: var(--neon); letter-spacing: 5px; margin-bottom: 20px; font-size: 26px; text-shadow: 0 0 10px var(--neon); }
+        h1 { color: var(--neon); letter-spacing: 5px; margin-bottom: 10px; font-size: 26px; text-shadow: 0 0 10px var(--neon); }
         input { width: 100%; padding: 12px; margin: 8px 0; background: #000; border: 1px solid #333; color: white; border-radius: 8px; box-sizing: border-box; outline: none; transition: 0.3s; }
         input:focus { border-color: var(--neon); box-shadow: 0 0 5px var(--neon); }
         button { width: 100%; padding: 14px; background: var(--neon); color: black; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; margin-top: 15px; text-transform: uppercase; letter-spacing: 1px; }
@@ -71,7 +71,7 @@ HTML_AUTH = """
         <h1>LUMINA OS</h1>
         <h2 id="auth-title" style="font-size:12px; color:#555; margin-bottom:20px; text-transform:uppercase;">Identificación de Usuario</h2>
         
-        <form method="POST" id="auth-form">
+        <form method="POST">
             <input type="hidden" name="action" id="action_input" value="login">
             <input type="text" name="usuario" placeholder="IDENTIFICADOR" required autofocus>
             <input type="password" name="password" placeholder="CONTRASEÑA / CÓDIGO" required>
@@ -107,7 +107,6 @@ HTML_AUTH = """
 </html>
 """
 
-# Se mantiene el HTML_PANEL del usuario (Monitor de Telemetría)
 HTML_PANEL = """
 <!DOCTYPE html>
 <html lang="es">
@@ -132,13 +131,13 @@ HTML_PANEL = """
 </head>
 <body>
     <div class="container">
-        <div class="user-bar"><span>SESIÓN: {{ usuario }}</span> <a href="/logout" style="color:var(--red); text-decoration:none;">[ SALIR ]</a></div>
+        <div class="user-bar"><span>OPERADOR: {{ usuario }}</span> <a href="/logout" style="color:var(--red); text-decoration:none;">[ DESCONECTAR ]</a></div>
         <h1>LUMINA OS</h1>
-        <div class="console">> LUMINA: {{ ultimo_msj }}</div>
+        <div class="console">> STATUS: {{ ultimo_msj }}</div>
 
         <div class="card">
             <form action="/enviar_tarea_web" method="POST">
-                <span class="label-neon">Asignar a:</span>
+                <span class="label-neon">Frecuencia de Mando:</span>
                 <select name="destinatario">
                     {% for user in lista_usuarios %}
                         <option value="{{ user }}">{{ user }}</option>
@@ -146,15 +145,15 @@ HTML_PANEL = """
                 </select>
                 <input type="text" name="tarea" placeholder="Misión / Objetivo" required>
                 <input type="number" name="mins" placeholder="Minutos" required>
-                <button type="submit" class="main-btn">DESPLEGAR ACTIVIDAD</button>
+                <button type="submit" class="main-btn">Transmitir Instrucción</button>
             </form>
         </div>
 
         <div class="card">
-            <span class="label-neon">Monitor de Equipo (Telemetría)</span>
+            <span class="label-neon">Telemetría de Equipo</span>
             <table>
-                <tr style="color:#555; font-size:9px;">
-                    <td>OPERADOR</td><td>ESTADO ACTUAL</td><td style="text-align:center;">ÉXITOS</td><td style="text-align:right;">GESTIÓN</td>
+                <tr style="color:#555; font-size:9px; text-transform: uppercase;">
+                    <td>ID UNIDAD</td><td>ACTIVIDAD</td><td style="text-align:center;">ÉXITOS</td><td style="text-align:right;">CONTROL</td>
                 </tr>
                 {% for op_name, op_info in equipo.items() %}
                 <tr>
@@ -163,7 +162,7 @@ HTML_PANEL = """
                     <td style="text-align:center;" class="badge-ok">{{ op_info.datos.rendimiento.exitos }}</td>
                     <td style="text-align:right;">
                         {% if usuario == 'operador1' and op_name != 'operador1' %}
-                            <a href="/eliminar_operador/{{ op_name }}" class="del-btn" onclick="return confirm('¿Eliminar operador?')">BORRAR</a>
+                            <a href="/eliminar_operador/{{ op_name }}" class="del-btn" onclick="return confirm('¿Confirmar baja de unidad?')">ELIMINAR</a>
                         {% endif %}
                     </td>
                 </tr>
@@ -184,7 +183,7 @@ HTML_PANEL = """
 </html>
 """
 
-# --- RUTAS DE SISTEMA ---
+# --- RUTAS ---
 
 @app.route('/acceso', methods=['GET', 'POST'])
 def acceso():
@@ -195,20 +194,16 @@ def acceso():
 
         if action == 'register':
             if u in usuarios_db:
-                return render_template_string(HTML_AUTH, error="ESTE IDENTIFICADOR YA ESTÁ REGISTRADO")
-            # Crear cuenta
+                return render_template_string(HTML_AUTH, error="EL IDENTIFICADOR YA EXISTE")
             usuarios_db[u] = {"password": p, "datos": inicializar_perfil(u)}
             guardar_db(usuarios_db)
             session['user'] = u
             return redirect(url_for('home'))
-
-        else: # Login
+        else:
             if u in usuarios_db and usuarios_db[u]['password'] == p:
                 session['user'] = u
                 return redirect(url_for('home'))
-            else:
-                return render_template_string(HTML_AUTH, error="CREDENCIALES INCORRECTAS O NO EXISTENTES")
-
+            return render_template_string(HTML_AUTH, error="ACCESO DENEGADO: CREDENCIALES INVÁLIDAS")
     return render_template_string(HTML_AUTH)
 
 @app.route('/')
@@ -224,8 +219,8 @@ def home():
 
 @app.route('/eliminar_operador/<nombre>')
 def eliminar_operador(nombre):
-    if session.get('user') == 'operador1':
-        if nombre in usuarios_db and nombre != 'operador1':
+    if session.get('user') == 'operador1' and nombre != 'operador1':
+        if nombre in usuarios_db:
             del usuarios_db[nombre]
             guardar_db(usuarios_db)
     return redirect(url_for('home'))
@@ -247,8 +242,8 @@ def enviar_tarea_web():
 @app.route('/verificar_cambios')
 def verificar_cambios():
     if 'user' not in session: return jsonify({"update": False})
-    # Detecta cambios en éxitos, tareas o si alguien fue eliminado/añadido
-    estado_equipo = "-".join([f"{u}:{usuarios_db[u]['datos']['rendimiento']['exitos']}:{usuarios_db[u]['datos']['tarea_actual']}" for u in usuarios_db])
+    # Detecta cambios en éxitos, tareas o si el número de usuarios cambió
+    estado_equipo = "-".join([f"{u}:{usuarios_db[u]['datos']['rendimiento']['exitos']}:{usuarios_db[u]['datos']['tarea_actual']}:{len(usuarios_db)}" for u in usuarios_db])
     if session.get('last_state') != estado_equipo:
         session['last_state'] = estado_equipo
         return jsonify({"update": True})
