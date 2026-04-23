@@ -43,32 +43,41 @@ HTML_PANEL = """
             font-family: 'Courier New', monospace; font-size: 13px; color: var(--neon);
         }
 
-        /* Botón especial para activar audio en celulares */
+        .audio-status {
+            text-align: center; margin-bottom: 15px;
+        }
+
         .audio-btn {
-            background: none; border: 1px solid var(--neon); color: var(--neon);
-            padding: 5px 10px; font-size: 10px; cursor: pointer; border-radius: 5px;
-            margin-bottom: 10px; width: 100%;
+            background: rgba(0, 255, 170, 0.1); border: 1px solid var(--neon); color: var(--neon);
+            padding: 8px; font-size: 10px; cursor: pointer; border-radius: 8px; width: 100%;
+            font-weight: bold; text-transform: uppercase;
         }
 
         .card { background: var(--card); border: 2px solid #1a1a1a; border-radius: 20px; padding: 25px; margin-bottom: 25px; }
         label { display: block; margin-bottom: 10px; color: var(--neon); font-size: 11px; font-weight: bold; text-transform: uppercase; }
-        input { width: 100%; padding: 15px; margin-bottom: 20px; border-radius: 10px; border: 1px solid #333; background: #000; color: white; box-sizing: border-box; }
+        input { width: 100%; padding: 15px; margin-bottom: 20px; border-radius: 10px; border: 1px solid #333; background: #000; color: white; box-sizing: border-box; outline: none; }
         button.main-btn { width: 100%; padding: 18px; border-radius: 12px; border: none; background: var(--neon); color: black; font-weight: 900; font-size: 16px; cursor: pointer; box-shadow: 0 0 15px var(--neon); }
         
         .stats { display: flex; justify-content: space-between; text-align: center; }
         .stat-num { display: block; font-size: 30px; font-weight: bold; color: var(--neon); }
         .stat-label { font-size: 10px; color: #555; text-transform: uppercase; }
-        
-        .badge { padding: 5px 10px; border-radius: 6px; font-size: 10px; font-weight: bold; }
-        .hecho { border-color: var(--neon); color: var(--neon); border: 1px solid; }
-        .retraso { border-color: #666; color: #999; border: 1px solid; }
+
+        /* TABLA DE REGISTRO */
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        td { padding: 12px 5px; border-bottom: 1px solid #1a1a1a; font-size: 14px; }
+        .badge { padding: 4px 8px; border-radius: 5px; font-size: 9px; font-weight: bold; text-transform: uppercase; border: 1px solid; }
+        .hecho { border-color: var(--neon); color: var(--neon); }
+        .retraso { border-color: #ff4444; color: #ff4444; }
+        .pendiente { border-color: #444; color: #444; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>LUMINA OS</h1>
         
-        <button class="audio-btn" onclick="activarAudio()">ACTIVAR SISTEMAS DE VOZ</button>
+        <div class="audio-status" id="audio-container">
+            <button class="audio-btn" onclick="permitirVoz()">Sincronizar Voz de Lumina</button>
+        </div>
 
         <div class="console">
             <div id="msj-texto">> LUMINA: {{ ultimo_msj }}</div>
@@ -76,11 +85,11 @@ HTML_PANEL = """
 
         <div class="card">
             <form action="/enviar_tarea_web" method="POST">
-                <label>Objetivo</label>
-                <input type="text" name="tarea" placeholder="..." required>
-                <label>Tiempo (Mins)</label>
-                <input type="number" name="mins" required>
-                <button type="submit" class="main-btn">DESPLEGAR LUMINA</button>
+                <label>Desplegar Objetivo</label>
+                <input type="text" name="tarea" placeholder="¿Qué vamos a lograr?" required>
+                <label>Tiempo Estimado (Mins)</label>
+                <input type="number" name="mins" placeholder="Ej. 45" required>
+                <button type="submit" class="main-btn">INICIAR SECUENCIA</button>
             </form>
         </div>
 
@@ -89,28 +98,51 @@ HTML_PANEL = """
             <div class="stat-box"><span class="stat-num">{{ rendimiento.exitos }}</span><span class="stat-label">Éxitos</span></div>
             <div class="stat-box"><span class="stat-num" style="color:#ff4444;">{{ rendimiento.retrasos }}</span><span class="stat-label">Retrasos</span></div>
         </div>
+
+        <div class="card">
+            <label>Registro de Operaciones</label>
+            <table>
+                {% for item in historial[::-1][:5] %}
+                <tr>
+                    <td>
+                        <div style="font-weight:bold;">{{ item.tarea }}</div>
+                        <div style="font-size:10px; color:#444;">ID: #{{ item.id }}</div>
+                    </td>
+                    <td style="text-align:right;">
+                        <span class="badge {{ 'hecho' if item.estado == 'HECHO' else 'retraso' if 'RETARDO' in item.estado or 'RETRASO' in item.estado else 'pendiente' }}">
+                            {{ item.estado }}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
     </div>
 
     <script>
-        function activarAudio() {
-            hablar("Sistemas de audio sincronizados.");
-            document.querySelector('.audio-btn').style.display = 'none';
+        // Lógica de Voz Persistente
+        function permitirVoz() {
+            sessionStorage.setItem('vozActivada', 'true');
+            document.getElementById('audio-container').style.display = 'none';
+            hablar("Sistemas de voz sincronizados y activos.");
         }
 
         function hablar(texto) {
             if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel(); // Detener cualquier voz pendiente
-                const mensaje = new SpeechSynthesisUtterance(texto.replace("> LUMINA:", ""));
-                mensaje.lang = 'es-ES'; // Cambiado a estándar para mayor compatibilidad
-                mensaje.rate = 1.0;
-                window.speechSynthesis.speak(mensaje);
+                window.speechSynthesis.cancel();
+                const msj = new SpeechSynthesisUtterance(texto.replace("> LUMINA:", ""));
+                msj.lang = 'es-ES';
+                msj.rate = 1.0;
+                window.speechSynthesis.speak(msj);
             }
         }
 
         window.onload = () => {
             const texto = document.getElementById('msj-texto').innerText;
-            // Intentar hablar, si falla es por el bloqueo del celular
-            hablar(texto);
+            if (sessionStorage.getItem('vozActivada') === 'true') {
+                document.getElementById('audio-container').style.display = 'none';
+                hablar(texto);
+            }
         };
 
         let hashEstado = "{{ historial|length }}-{{ rendimiento.exitos }}-{{ rendimiento.retrasos }}";
@@ -157,7 +189,7 @@ def reportar_progreso():
                 db['ultimo_msj'] = "Objetivo completado. Rendimiento óptimo."
             else:
                 db['rendimiento']['retrasos'] += 1
-                db['ultimo_msj'] = "Alerta de retraso. Se requiere ajuste de ritmo."
+                db['ultimo_msj'] = "Alerta de retraso detectada en el sistema."
             break
     return jsonify({"status": "OK"})
 
