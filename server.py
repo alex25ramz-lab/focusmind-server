@@ -21,6 +21,7 @@ def inicializar_perfil(nombre):
     }
 
 def cargar_db():
+    # Cuenta maestra por defecto si el archivo no existe
     cuentas_maestras = {
         "operador1": {"password": "123", "datos": inicializar_perfil("Operador 1")}
     }
@@ -29,9 +30,12 @@ def cargar_db():
     with open(DB_FILE, "r") as f:
         try: 
             data = json.load(f)
-            if "operador1" not in data: data["operador1"] = cuentas_maestras["operador1"]
+            # Asegurar que el admin siempre exista
+            if "operador1" not in data: 
+                data["operador1"] = cuentas_maestras["operador1"]
             return data
-        except: return cuentas_maestras
+        except: 
+            return cuentas_maestras
 
 def guardar_db(db):
     with open(DB_FILE, "w") as f:
@@ -154,8 +158,8 @@ HTML_PANEL = """
         <div class="card" style="border-style: dashed; opacity: 0.8;">
             <span class="label-neon">+ Registrar Nueva Unidad</span>
             <form action="/admin_registrar" method="POST" style="display: flex; gap: 10px; margin-top: 10px;">
-                <input type="text" name="nuevo_usuario" placeholder="ID Usuario" required style="margin:0;">
-                <input type="password" name="nuevo_pass" placeholder="Password" required style="margin:0;">
+                <input type="text" name="nuevo_usuario" placeholder="ID Usuario" required style="margin:0; flex:1;">
+                <input type="password" name="nuevo_pass" placeholder="Password" required style="margin:0; flex:1;">
                 <button type="submit" class="mini-btn">AÑADIR</button>
             </form>
         </div>
@@ -254,13 +258,14 @@ def logout():
 @app.route('/verificar_cambios')
 def verificar_cambios():
     if 'user' not in session: return jsonify({"update": False})
+    # Detecta cambios en envíos o en la cantidad total de usuarios
     estado_equipo = "-".join([f"{u}:{usuarios_db[u]['datos']['id_envio']}:{len(usuarios_db)}" for u in usuarios_db])
     if session.get('last_state') != estado_equipo:
         session['last_state'] = estado_equipo
         return jsonify({"update": True})
     return jsonify({"update": False})
 
-# --- API PARA HARDWARE EXTERNO (LAPTOP/RELOJ) ---
+# --- API PARA HARDWARE EXTERNO ---
 
 @app.route('/get_data')
 def get_data():
@@ -285,6 +290,7 @@ def reportar():
         return jsonify({"ok": True})
     return jsonify({"ok": False}), 400
 
+# --- INICIO ---
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
