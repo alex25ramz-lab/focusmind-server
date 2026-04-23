@@ -178,7 +178,7 @@ HTML_PANEL = """
 </html>
 """
 
-# --- RUTAS ---
+# --- RUTAS DE ACCESO ---
 
 @app.route('/registro', methods=['GET', 'POST'])
 def registro():
@@ -204,6 +204,8 @@ def login():
         return render_template_string(HTML_AUTH, modo='login', error="ACCESO DENEGADO: CREDENCIALES INVÁLIDAS")
     return render_template_string(HTML_AUTH, modo='login')
 
+# --- RUTAS DE PANEL ---
+
 @app.route('/')
 def home():
     if 'user' not in session: return redirect(url_for('login'))
@@ -217,6 +219,7 @@ def home():
 
 @app.route('/admin_registrar', methods=['POST'])
 def admin_registrar():
+    # Solo el operador maestro puede añadir unidades
     if session.get('user') == 'operador1':
         u = request.form.get('nuevo_usuario').strip()
         p = request.form.get('nuevo_pass').strip()
@@ -227,6 +230,7 @@ def admin_registrar():
 
 @app.route('/eliminar_operador/<nombre>')
 def eliminar_operador(nombre):
+    # Solo el operador maestro puede borrar, y no puede borrarse a sí mismo
     if session.get('user') == 'operador1' and nombre != 'operador1':
         if nombre in usuarios_db:
             del usuarios_db[nombre]
@@ -255,12 +259,14 @@ def logout():
 @app.route('/verificar_cambios')
 def verificar_cambios():
     if 'user' not in session: return jsonify({"update": False})
+    # Detecta si cambió el número de usuarios o los IDs de envío
     estado_equipo = "-".join([f"{u}:{usuarios_db[u]['datos']['id_envio']}:{len(usuarios_db)}" for u in usuarios_db])
     if session.get('last_state') != estado_equipo:
         session['last_state'] = estado_equipo
         return jsonify({"update": True})
     return jsonify({"update": False})
 
+# --- INICIO ---
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
