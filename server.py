@@ -62,8 +62,6 @@ HTML_AUTH = """
         h1 { color: var(--neon); letter-spacing: 5px; margin-bottom: 30px; font-size: 24px; }
         input { width: 100%; padding: 12px; margin: 10px 0; background: #000; border: 1px solid #333; color: white; border-radius: 8px; box-sizing: border-box; outline: none; }
         button { width: 100%; padding: 12px; background: var(--neon); color: black; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; }
-        .toggle-link { margin-top: 20px; font-size: 13px; color: #555; }
-        .toggle-link a { color: var(--neon); text-decoration: none; }
     </style>
 </head>
 <body>
@@ -71,9 +69,8 @@ HTML_AUTH = """
         <h1>LUMINA OS</h1>
         <form method="POST">
             <input type="text" name="usuario" placeholder="NOMBRE DEL OPERADOR" required autofocus>
-            <button type="submit">ENTRAR / REGISTRAR</button>
+            <button type="submit">ACCEDER AL SISTEMA</button>
         </form>
-        <div class="toggle-link">El sistema usará acceso rápido sin códigos.</div>
     </div>
 </body>
 </html>
@@ -103,7 +100,7 @@ HTML_PANEL = """
 </head>
 <body>
     <div class="container">
-        <div class="user-bar"><span>ID: {{ usuario }}</span> <a href="/logout" style="color:var(--red); text-decoration:none;">[ SALIR ]</a></div>
+        <div class="user-bar"><span>OPERADOR: {{ usuario }}</span> <a href="/logout" style="color:var(--red); text-decoration:none;">[ SALIR ]</a></div>
         <h1>LUMINA OS</h1>
         <div class="console">> LUMINA: {{ ultimo_msj }}</div>
 
@@ -112,12 +109,12 @@ HTML_PANEL = """
                 <span class="label-neon">Asignar a:</span>
                 <select name="destinatario">
                     {% for user in lista_usuarios %}
-                        <option value="{{ user }}">{{ user | upper }}</option>
+                        <option value="{{ user }}">{{ user }}</option>
                     {% endfor %}
                 </select>
                 <input type="text" name="tarea" placeholder="Misión / Objetivo" required>
                 <input type="number" name="mins" placeholder="Minutos" required>
-                <button type="submit" class="main-btn">Desplegar Actividad</button>
+                <button type="submit" class="main-btn">DESPLEGAR ACTIVIDAD</button>
             </form>
         </div>
 
@@ -126,7 +123,7 @@ HTML_PANEL = """
             <table>
                 <tr style="color:#555; font-size:9px;">
                     <td>OPERADOR</td>
-                    <td>ACTIVIDAD</td>
+                    <td>ESTADO ACTUAL</td>
                     <td style="text-align:center;">ÉXITOS</td>
                     <td style="text-align:right;">GESTIÓN</td>
                 </tr>
@@ -137,7 +134,7 @@ HTML_PANEL = """
                     <td style="text-align:center;" class="badge-ok">{{ op_info.datos.rendimiento.exitos }}</td>
                     <td style="text-align:right;">
                         {% if op_name != 'operador1' %}
-                            <a href="/eliminar_operador/{{ op_name }}" class="del-btn" onclick="return confirm('¿Eliminar?')">ELIMINAR</a>
+                            <a href="/eliminar_operador/{{ op_name }}" class="del-btn" onclick="return confirm('¿Eliminar operador?')">BORRAR</a>
                         {% endif %}
                     </td>
                 </tr>
@@ -161,12 +158,12 @@ HTML_PANEL = """
 </html>
 """
 
-# --- RUTAS ---
+# --- RUTAS DE SISTEMA ---
 
 @app.route('/registro', methods=['GET', 'POST'])
 def registro():
     if request.method == 'POST':
-        u = request.form.get('usuario').strip().lower()
+        u = request.form.get('usuario').strip() # Quitamos el .lower() para respetar mayúsculas
         if u not in usuarios_db:
             usuarios_db[u] = {"password": "123", "datos": inicializar_perfil(u)}
             guardar_db(usuarios_db)
@@ -202,17 +199,49 @@ def enviar_tarea_web():
     dest = request.form.get('destinatario')
     if dest in usuarios_db:
         db = usuarios_db[dest]['datos']
+        db['id_envio'] += 1 # Incrementar ID para que la laptop detecte cambio
         db['tarea_actual'] = request.form.get('tarea')
-        db['tiempo_actual'] = request.form.get('mins')
+        db['tiempo_actual'] = int(request.form.get('mins'))
         db['ultimo_msj'] = random.choice(FRASES_LUMINA)
         db['rendimiento']['total'] += 1
         guardar_db(usuarios_db)
     return redirect(url_for('home'))
 
+# --- RUTAS API PARA LA LAPTOP ---
+
+@app.route('/get_data')
+def get_data():
+    user = request.args.get('user')
+    if user in usuarios_db:
+        db = usuarios_db[user]['datos']
+        return jsonify({
+            "tarea": db['tarea_actual'], 
+            "tiempo": db['tiempo_actual'], 
+            "id": db['id_envio']
+        })
+    return jsonify({"error": "No user"}), 404
+
+@app.route('/reportar_progreso', methods=['POST'])
+def reportar():
+    data = request.json
+    user = data.get('user')
+    if user in usuarios_db:
+        db = usuarios_db[user]['datos']
+        # Si la laptop reporta éxito
+        if data.get('estado') == "HECHO":
+            db['rendimiento']['exitos'] += 1
+            db['tarea_actual'] = "Misión Cumplida"
+        else:
+            db['rendimiento']['retrasos'] += 1
+        guardar_db(usuarios_db)
+        return jsonify({"ok": True})
+    return jsonify({"ok": False}), 400
+
 @app.route('/verificar_cambios')
 def verificar_cambios():
     if 'user' not in session: return jsonify({"update": False})
-    estado_equipo = "-".join([f"{u}:{usuarios_db[u]['datos']['rendimiento']['exitos']}" for u in usuarios_db])
+    # Revisa si cambió el conteo global de éxitos o la tarea actual de cualquier operador
+    estado_equipo = "-".join([f"{u}:{usuarios_db[u]['datos']['rendimiento']['exitos']}:{usuarios_db[u]['datos']['tarea_actual']}" for u in usuarios_db])
     if session.get('last_state') != estado_equipo:
         session['last_state'] = estado_equipo
         return jsonify({"update": True})
