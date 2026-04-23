@@ -21,19 +21,15 @@ def inicializar_perfil(nombre):
     }
 
 def cargar_db():
-    # Cuentas que NO se pueden borrar y siempre se restauran si el archivo se daña
     cuentas_maestras = {
         "operador1": {"password": "123", "datos": inicializar_perfil("Operador 1")},
         "compa": {"password": "456", "datos": inicializar_perfil("Compa")}
     }
-
     if not os.path.exists(DB_FILE):
         return cuentas_maestras
-    
     with open(DB_FILE, "r") as f:
         try: 
             data = json.load(f)
-            # Asegurar que las maestras siempre estén presentes
             for user, info in cuentas_maestras.items():
                 if user not in data:
                     data[user] = info
@@ -54,43 +50,7 @@ FRASES_LUMINA = [
     "Enfoque de ingeniería establecido. Adelante."
 ]
 
-# --- VISTAS HTML ---
-
-HTML_AUTH = """
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8"><title>LUMINA OS - Auth</title>
-    <style>
-        :root { --neon: #00ffaa; --bg: #050505; }
-        body { background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .auth-card { background: #0d0d0d; padding: 40px; border-radius: 20px; border: 1px solid var(--neon); width: 320px; text-align: center; box-shadow: 0 0 20px rgba(0,255,170,0.1); }
-        h1 { color: var(--neon); letter-spacing: 5px; margin-bottom: 30px; font-size: 24px; }
-        input { width: 100%; padding: 12px; margin: 10px 0; background: #000; border: 1px solid #333; color: white; border-radius: 8px; box-sizing: border-box; outline: none; }
-        input:focus { border-color: var(--neon); }
-        button { width: 100%; padding: 12px; background: var(--neon); color: black; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; margin-top: 10px; }
-        .toggle-link { margin-top: 20px; font-size: 13px; color: #555; }
-        .toggle-link a { color: var(--neon); text-decoration: none; }
-        .error { color: #ff4444; font-size: 12px; margin-top: 15px; }
-    </style>
-</head>
-<body>
-    <div class="auth-card">
-        <h1>LUMINA OS</h1>
-        <form method="POST">
-            <input type="text" name="usuario" placeholder="ID OPERADOR" required>
-            <input type="password" name="password" placeholder="CÓDIGO" required>
-            <button type="submit">{{ 'ENTRAR' if modo == 'login' else 'REGISTRAR' }}</button>
-        </form>
-        <div class="toggle-link">
-            {% if modo == 'login' %} ¿Nuevo aquí? <a href="/registro">Crear cuenta</a>
-            {% else %} ¿Ya tienes cuenta? <a href="/login">Ir al Login</a> {% endif %}
-        </div>
-        {% if error %}<div class="error">{{ error }}</div>{% endif %}
-    </div>
-</body>
-</html>
-"""
+# --- HTML ACTUALIZADO CON TELEMETRÍA DETALLADA ---
 
 HTML_PANEL = """
 <!DOCTYPE html>
@@ -100,73 +60,88 @@ HTML_PANEL = """
     <style>
         :root { --neon: #00ffaa; --bg: #050505; --card: #0d0d0d; --red: #ff4444; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: white; padding: 20px; }
-        .container { max-width: 550px; margin: auto; }
+        .container { max-width: 600px; margin: auto; }
         .user-bar { display: flex; justify-content: space-between; font-size: 10px; color: var(--neon); margin-bottom: 15px; text-transform: uppercase; }
         h1 { color: var(--neon); text-align: center; letter-spacing: 5px; text-shadow: 0 0 10px var(--neon); }
         .console { background: rgba(0,255,170,0.05); border-left: 3px solid var(--neon); padding: 15px; margin-bottom: 20px; font-family: monospace; color: var(--neon); min-height: 40px; }
-        .card { background: var(--card); border: 1px solid #222; border-radius: 15px; padding: 20px; margin-bottom: 20px; position: relative; }
+        .card { background: var(--card); border: 1px solid #222; border-radius: 15px; padding: 20px; margin-bottom: 20px; }
         input, select { width: 100%; padding: 12px; margin: 5px 0 15px 0; border-radius: 8px; border: 1px solid #333; background: #000; color: white; box-sizing: border-box; outline: none; }
-        input:focus, select:focus { border-color: var(--neon); }
-        .main-btn { width: 100%; padding: 15px; border-radius: 10px; background: var(--neon); color: black; font-weight: bold; border: none; cursor: pointer; box-shadow: 0 0 10px var(--neon); text-transform: uppercase; }
-        .stats { display: flex; justify-content: space-around; text-align: center; }
-        .stat-num { display: block; font-size: 24px; color: var(--neon); font-weight: bold; }
-        .stat-label { font-size: 9px; color: #666; text-transform: uppercase; }
+        .main-btn { width: 100%; padding: 15px; border-radius: 10px; background: var(--neon); color: black; font-weight: bold; border: none; cursor: pointer; text-transform: uppercase; box-shadow: 0 0 10px var(--neon); }
+        
+        /* Tabla de Telemetría Mejorada */
         table { width: 100%; margin-top: 10px; font-size: 12px; border-collapse: collapse; }
-        td { padding: 12px 5px; border-bottom: 1px solid #222; }
-        .badge { padding: 3px 7px; border-radius: 4px; font-size: 10px; border: 1px solid; text-transform: uppercase; }
-        .label-neon { font-size: 10px; color: var(--neon); text-transform: uppercase; display: block; margin-bottom: 5px; }
-        .del-btn { color: var(--red); text-decoration: none; font-size: 10px; border: 1px solid var(--red); padding: 2px 5px; border-radius: 4px; transition: 0.3s; }
+        th { text-align: left; color: #555; font-size: 9px; padding: 10px 5px; text-transform: uppercase; border-bottom: 1px solid #222; }
+        td { padding: 12px 5px; border-bottom: 1px solid #111; }
+        .badge-ok { color: var(--neon); font-weight: bold; }
+        .del-btn { color: var(--red); text-decoration: none; font-size: 9px; border: 1px solid var(--red); padding: 2px 5px; border-radius: 4px; }
         .del-btn:hover { background: var(--red); color: white; }
+        .add-link { display: block; text-align: center; margin-top: 15px; color: var(--neon); text-decoration: none; font-size: 11px; letter-spacing: 1px; }
+        .label-neon { font-size: 10px; color: var(--neon); text-transform: uppercase; display: block; margin-bottom: 5px; }
+        
+        .stats-grid { display: flex; justify-content: space-around; text-align: center; margin-top: 10px; }
+        .stat-item { flex: 1; }
+        .stat-val { display: block; font-size: 22px; color: var(--neon); font-weight: bold; }
+        .stat-lab { font-size: 8px; color: #666; text-transform: uppercase; }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="user-bar"><span>ID: {{ usuario }}</span> <a href="/logout" style="color:var(--red); text-decoration:none;">[ SALIR ]</a></div>
+        <div class="user-bar"><span>OPERADOR: {{ usuario }}</span> <a href="/logout" style="color:var(--red); text-decoration:none;">[ SALIR ]</a></div>
         <h1>LUMINA OS</h1>
         <div class="console" id="msj-texto">> LUMINA: {{ ultimo_msj }}</div>
 
         <div class="card">
             <form action="/enviar_tarea_web" method="POST">
-                <span class="label-neon">Asignar a:</span>
+                <span class="label-neon">Asignar Misión A:</span>
                 <select name="destinatario">
                     {% for user in lista_usuarios %}
-                        <option value="{{ user }}" {% if user == usuario %}selected{% endif %}>{{ user | upper }}</option>
+                        <option value="{{ user }}">{{ user | upper }}</option>
                     {% endfor %}
                 </select>
-                <input type="text" name="tarea" placeholder="Misión / Objetivo" required>
-                <input type="number" name="mins" placeholder="Minutos" required>
-                <button type="submit" class="main-btn">Desplegar Actividad</button>
+                <input type="text" name="tarea" placeholder="Descripción de la tarea" required>
+                <input type="number" name="mins" placeholder="Tiempo (min)" required>
+                <button type="submit" class="main-btn">Desplegar Objetivo</button>
             </form>
         </div>
 
-        <div class="card stats">
-            <div><span class="stat-num">{{ rendimiento.total }}</span><span class="stat-label">Total</span></div>
-            <div><span class="stat-num">{{ rendimiento.exitos }}</span><span class="stat-label">Éxitos</span></div>
-            <div><span class="stat-num" style="color:var(--red);">{{ rendimiento.retrasos }}</span><span class="stat-label">Retrasos</span></div>
+        <div class="card">
+            <span class="label-neon">Tu Rendimiento Personal</span>
+            <div class="stats-grid">
+                <div class="stat-item"><span class="stat-val">{{ rendimiento.total }}</span><span class="stat-lab">Asignadas</span></div>
+                <div class="stat-item"><span class="stat-val">{{ rendimiento.exitos }}</span><span class="stat-lab">Éxitos</span></div>
+                <div class="stat-item"><span class="stat-item"><span class="stat-val" style="color:var(--red);">{{ rendimiento.retrasos }}</span><span class="stat-lab">Retrasos</span></div>
+            </div>
         </div>
 
         <div class="card">
-            <span class="label-neon">Estado del Equipo en Tiempo Real</span>
+            <span class="label-neon">Monitor de Equipo (Telemetría Real)</span>
             <table>
-                <tr style="color:#555; font-size:9px;">
-                    <td>OPERADOR</td>
-                    <td>ACTIVIDAD</td>
-                    <td style="text-align:right;">ACCIONES</td>
-                </tr>
-                {% for op_name, op_info in equipo.items() %}
-                <tr>
-                    <td style="color:var(--neon);">{{ op_name }}</td>
-                    <td style="font-size:11px;">{{ op_info.datos.tarea_actual }}</td>
-                    <td style="text-align:right;">
-                        {% if usuario == 'operador1' and op_name != 'operador1' %}
-                            <a href="/eliminar_operador/{{ op_name }}" class="del-btn" onclick="return confirm('¿Eliminar operador?')">ELIMINAR</a>
-                        {% else %}
-                            <span style="color:#333; font-size:9px;">ACTIVO</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
+                <thead>
+                    <tr>
+                        <th>Operador</th>
+                        <th>Tarea Actual</th>
+                        <th style="text-align:center;">Éxitos</th>
+                        <th style="text-align:right;">Gestión</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for op_name, op_info in equipo.items() %}
+                    <tr>
+                        <td style="color:var(--neon); font-weight:bold;">{{ op_name }}</td>
+                        <td style="font-size:11px;">{{ op_info.datos.tarea_actual }}</td>
+                        <td style="text-align:center;" class="badge-ok">{{ op_info.datos.rendimiento.exitos }}</td>
+                        <td style="text-align:right;">
+                            {% if usuario == 'operador1' and op_name != 'operador1' %}
+                                <a href="/eliminar_operador/{{ op_name }}" class="del-btn" onclick="return confirm('¿Confirmar baja de operador?')">ELIMINAR</a>
+                            {% else %}
+                                <span style="color:#222; font-size:8px;">MAESTRO</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
             </table>
+            <a href="/registro" class="add-link">+ REGISTRAR NUEVO OPERADOR</a>
         </div>
     </div>
 
@@ -192,7 +167,7 @@ HTML_PANEL = """
 </html>
 """
 
-# --- RUTAS DE SISTEMA ---
+# --- RUTAS ---
 
 @app.route('/registro', methods=['GET', 'POST'])
 def registro():
@@ -211,7 +186,7 @@ def login():
         if u in usuarios_db and usuarios_db[u]['password'] == p:
             session['user'] = u
             db = usuarios_db[u]['datos']
-            session['last_state'] = f"{len(db['historial'])}-{db['rendimiento']['exitos']}"
+            session['last_state'] = f"{len(db['historial'])}-{db['rendimiento']['exitos']}-{db['tarea_actual']}"
             return redirect(url_for('home'))
         return render_template_string(HTML_AUTH, modo='login', error="Datos de acceso incorrectos")
     return render_template_string(HTML_AUTH, modo='login')
@@ -232,11 +207,9 @@ def home():
                                 equipo=usuarios_db,
                                 **usuarios_db[user]['datos'])
 
-# --- GESTIÓN DE EQUIPO ---
-
 @app.route('/eliminar_operador/<nombre>')
 def eliminar_operador(nombre):
-    if session.get('user') == 'operador1': # Solo tú puedes borrar
+    if session.get('user') == 'operador1':
         if nombre in usuarios_db and nombre != 'operador1':
             del usuarios_db[nombre]
             guardar_db(usuarios_db)
@@ -260,8 +233,6 @@ def enviar_tarea_web():
         guardar_db(usuarios_db)
     return redirect(url_for('home'))
 
-# --- API PARA LAPTOPS Y SINCRONIZACIÓN ---
-
 @app.route('/get_data')
 def get_data():
     user = request.args.get('user')
@@ -284,7 +255,7 @@ def reportar():
                     db['ultimo_msj'] = f"Operador {user}: Tarea completada."
                 else:
                     db['rendimiento']['retrasos'] += 1
-                    db['ultimo_msj'] = f"Operador {user}: Se ha registrado un retraso."
+                    db['ultimo_msj'] = f"Operador {user}: Alerta de retraso."
                 guardar_db(usuarios_db)
                 return jsonify({"ok": True})
     return jsonify({"ok": False}), 400
@@ -293,9 +264,13 @@ def reportar():
 def verificar_cambios():
     if 'user' not in session: return jsonify({"update": False})
     user = session['user']
-    if user not in usuarios_db: return jsonify({"update": True}) # Forzar recarga si el usuario fue borrado
+    if user not in usuarios_db: return jsonify({"update": True})
     db = usuarios_db[user]['datos']
-    estado_actual = f"{len(db['historial'])}-{db['rendimiento']['exitos']}-{db['tarea_actual']}"
+    
+    # Esta línea es CLAVE: detectamos cambios en todo el equipo para refrescar la tabla
+    estado_equipo = "-".join([f"{u}:{usuarios_db[u]['datos']['rendimiento']['exitos']}" for u in usuarios_db])
+    estado_actual = f"{len(db['historial'])}-{db['tarea_actual']}-{estado_equipo}"
+    
     if session.get('last_state') != estado_actual:
         session['last_state'] = estado_actual
         return jsonify({"update": True})
