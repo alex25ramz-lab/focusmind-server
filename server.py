@@ -22,16 +22,15 @@ def inicializar_perfil(nombre):
 
 def cargar_db():
     cuentas_maestras = {
-        "operador1": {"password": "123", "datos": inicializar_perfil("Operador 1")},
-        "compa": {"password": "123", "datos": inicializar_perfil("Compa")}
+        "operador1": {"password": "123", "datos": inicializar_perfil("Operador 1")}
     }
     if not os.path.exists(DB_FILE):
         return cuentas_maestras
     with open(DB_FILE, "r") as f:
         try: 
             data = json.load(f)
-            for user, info in cuentas_maestras.items():
-                if user not in data: data[user] = info
+            # Aseguramos que el operador maestro siempre exista con su clave
+            if "operador1" not in data: data["operador1"] = cuentas_maestras["operador1"]
             return data
         except: return cuentas_maestras
 
@@ -58,20 +57,38 @@ HTML_AUTH = """
     <style>
         :root { --neon: #00ffaa; --bg: #050505; }
         body { background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .auth-card { background: #0d0d0d; padding: 40px; border-radius: 20px; border: 1px solid var(--neon); width: 320px; text-align: center; }
+        .auth-card { background: #0d0d0d; padding: 40px; border-radius: 20px; border: 1px solid var(--neon); width: 320px; text-align: center; box-shadow: 0 0 15px rgba(0,255,170,0.1); }
         h1 { color: var(--neon); letter-spacing: 5px; margin-bottom: 30px; font-size: 24px; }
         input { width: 100%; padding: 12px; margin: 10px 0; background: #000; border: 1px solid #333; color: white; border-radius: 8px; box-sizing: border-box; outline: none; }
-        button { width: 100%; padding: 12px; background: var(--neon); color: black; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; }
+        button { width: 100%; padding: 12px; background: var(--neon); color: black; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; margin-top: 10px; }
+        .error { color: #ff4444; font-size: 11px; margin-top: 15px; }
     </style>
 </head>
 <body>
     <div class="auth-card">
         <h1>LUMINA OS</h1>
         <form method="POST">
-            <input type="text" name="usuario" placeholder="NOMBRE DEL OPERADOR" required autofocus>
-            <button type="submit">ACCEDER AL SISTEMA</button>
+            <input type="text" id="user_input" name="usuario" placeholder="NOMBRE O ID" required autofocus oninput="togglePass()">
+            <div id="pass_container" style="display:none;">
+                <input type="password" name="password" placeholder="CÓDIGO OPERADOR">
+            </div>
+            <button type="submit">ACCEDER</button>
         </form>
+        {% if error %}<div class="error">{{ error }}</div>{% endif %}
     </div>
+
+    <script>
+        function togglePass() {
+            const user = document.getElementById('user_input').value.trim().toLowerCase();
+            const passContainer = document.getElementById('pass_container');
+            // Si detecta 'operador1', muestra el campo de password
+            if (user === 'operador1') {
+                passContainer.style.display = 'block';
+            } else {
+                passContainer.style.display = 'none';
+            }
+        }
+    </script>
 </body>
 </html>
 """
@@ -100,7 +117,7 @@ HTML_PANEL = """
 </head>
 <body>
     <div class="container">
-        <div class="user-bar"><span>OPERADOR: {{ usuario }}</span> <a href="/logout" style="color:var(--red); text-decoration:none;">[ SALIR ]</a></div>
+        <div class="user-bar"><span>SESIÓN: {{ usuario }}</span> <a href="/logout" style="color:var(--red); text-decoration:none;">[ SALIR ]</a></div>
         <h1>LUMINA OS</h1>
         <div class="console">> LUMINA: {{ ultimo_msj }}</div>
 
@@ -163,12 +180,25 @@ HTML_PANEL = """
 @app.route('/registro', methods=['GET', 'POST'])
 def registro():
     if request.method == 'POST':
-        u = request.form.get('usuario').strip() # Quitamos el .lower() para respetar mayúsculas
+        u = request.form.get('usuario').strip()
+        p = request.form.get('password', '').strip()
+        
+        # SEGURIDAD PARA OPERADOR 1
+        if u.lower() == 'operador1':
+            if p == usuarios_db['operador1']['password']:
+                session['user'] = 'operador1'
+                return redirect(url_for('home'))
+            else:
+                return render_template_string(HTML_AUTH, error="CÓDIGO DE OPERADOR INVÁLIDO")
+        
+        # ACCESO PARA USUARIOS NORMALES
         if u not in usuarios_db:
             usuarios_db[u] = {"password": "123", "datos": inicializar_perfil(u)}
             guardar_db(usuarios_db)
+        
         session['user'] = u
         return redirect(url_for('home'))
+        
     return render_template_string(HTML_AUTH)
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -188,9 +218,11 @@ def home():
 
 @app.route('/eliminar_operador/<nombre>')
 def eliminar_operador(nombre):
-    if nombre in usuarios_db and nombre != 'operador1':
-        del usuarios_db[nombre]
-        guardar_db(usuarios_db)
+    # Solo el operador maestro puede eliminar a otros
+    if session.get('user') == 'operador1':
+        if nombre in usuarios_db and nombre != 'operador1':
+            del usuarios_db[nombre]
+            guardar_db(usuarios_db)
     return redirect(url_for('home'))
 
 @app.route('/enviar_tarea_web', methods=['POST'])
@@ -199,7 +231,7 @@ def enviar_tarea_web():
     dest = request.form.get('destinatario')
     if dest in usuarios_db:
         db = usuarios_db[dest]['datos']
-        db['id_envio'] += 1 # Incrementar ID para que la laptop detecte cambio
+        db['id_envio'] += 1
         db['tarea_actual'] = request.form.get('tarea')
         db['tiempo_actual'] = int(request.form.get('mins'))
         db['ultimo_msj'] = random.choice(FRASES_LUMINA)
@@ -207,18 +239,12 @@ def enviar_tarea_web():
         guardar_db(usuarios_db)
     return redirect(url_for('home'))
 
-# --- RUTAS API PARA LA LAPTOP ---
-
 @app.route('/get_data')
 def get_data():
     user = request.args.get('user')
     if user in usuarios_db:
         db = usuarios_db[user]['datos']
-        return jsonify({
-            "tarea": db['tarea_actual'], 
-            "tiempo": db['tiempo_actual'], 
-            "id": db['id_envio']
-        })
+        return jsonify({"tarea": db['tarea_actual'], "tiempo": db['tiempo_actual'], "id": db['id_envio']})
     return jsonify({"error": "No user"}), 404
 
 @app.route('/reportar_progreso', methods=['POST'])
@@ -227,7 +253,6 @@ def reportar():
     user = data.get('user')
     if user in usuarios_db:
         db = usuarios_db[user]['datos']
-        # Si la laptop reporta éxito
         if data.get('estado') == "HECHO":
             db['rendimiento']['exitos'] += 1
             db['tarea_actual'] = "Misión Cumplida"
@@ -240,7 +265,6 @@ def reportar():
 @app.route('/verificar_cambios')
 def verificar_cambios():
     if 'user' not in session: return jsonify({"update": False})
-    # Revisa si cambió el conteo global de éxitos o la tarea actual de cualquier operador
     estado_equipo = "-".join([f"{u}:{usuarios_db[u]['datos']['rendimiento']['exitos']}:{usuarios_db[u]['datos']['tarea_actual']}" for u in usuarios_db])
     if session.get('last_state') != estado_equipo:
         session['last_state'] = estado_equipo
