@@ -5,22 +5,11 @@ import random
 import json
 
 app = Flask(__name__)
-# Usamos una clave fija para evitar que las sesiones se cierren al reiniciar en Render
+# Clave fija para que las sesiones no expiren al reiniciar el server
 app.secret_key = "lumina_proto_2026_key_ultra_secure"
 
-# --- SISTEMA DE PERSISTENCIA ---
+# --- SISTEMA DE PERSISTENCIA ROBUSTO ---
 DB_FILE = "database.json"
-
-def cargar_db():
-    if not os.path.exists(DB_FILE):
-        return {} 
-    with open(DB_FILE, "r") as f:
-        try: return json.load(f)
-        except: return {}
-
-def guardar_db(db):
-    with open(DB_FILE, "w") as f:
-        json.dump(db, f, indent=4)
 
 def inicializar_perfil(nombre):
     return {
@@ -32,7 +21,33 @@ def inicializar_perfil(nombre):
         "ultimo_msj": f"Sistemas LUMINA inicializados para {nombre}."
     }
 
-# Carga inicial de datos
+def cargar_db():
+    # --- CONFIGURA AQUÍ TUS CUENTAS QUE NUNCA SE BORRAN ---
+    cuentas_maestras = {
+        "operador1": {"password": "123", "datos": inicializar_perfil("Operador 1")},
+        "compa": {"password": "456", "datos": inicializar_perfil("Compa")}
+    }
+
+    if not os.path.exists(DB_FILE):
+        # Si el archivo no existe (reinicio de Render), regresamos las maestras
+        return cuentas_maestras
+    
+    with open(DB_FILE, "r") as f:
+        try: 
+            data = json.load(f)
+            # Mezclamos: Si una cuenta maestra no está en el JSON, la agregamos
+            for user, info in cuentas_maestras.items():
+                if user not in data:
+                    data[user] = info
+            return data
+        except: 
+            return cuentas_maestras
+
+def guardar_db(db):
+    with open(DB_FILE, "w") as f:
+        json.dump(db, f, indent=4)
+
+# Carga inicial de datos combinada
 usuarios_db = cargar_db()
 
 FRASES_LUMINA = [
@@ -42,7 +57,7 @@ FRASES_LUMINA = [
     "Enfoque de ingeniería establecido. Adelante."
 ]
 
-# --- VISTAS HTML ---
+# --- VISTAS HTML (Sin cambios en tu diseño original) ---
 
 HTML_AUTH = """
 <!DOCTYPE html>
@@ -167,14 +182,15 @@ HTML_PANEL = """
 </html>
 """
 
-# --- RUTAS ---
+# --- RUTAS DE ACCESO ---
 
 @app.route('/registro', methods=['GET', 'POST'])
 def registro():
     if request.method == 'POST':
         u = request.form.get('usuario').strip()
         p = request.form.get('password').strip()
-        if u in usuarios_db: return render_template_string(HTML_AUTH, modo='registro', error="ID ya existe")
+        if u in usuarios_db: 
+            return render_template_string(HTML_AUTH, modo='registro', error="ID ya existe")
         usuarios_db[u] = {"password": p, "datos": inicializar_perfil(u)}
         guardar_db(usuarios_db)
         return redirect(url_for('login'))
@@ -185,20 +201,29 @@ def login():
     if request.method == 'POST':
         u = request.form.get('usuario').strip()
         p = request.form.get('password').strip()
+        # Verificar en la base de datos cargada (que incluye las maestras)
         if u in usuarios_db and usuarios_db[u]['password'] == p:
             session['user'] = u
-            # Inicializamos el estado en la sesión para evitar bucles de recarga
             db = usuarios_db[u]['datos']
             session['last_state'] = f"{len(db['historial'])}-{db['rendimiento']['exitos']}-{db['rendimiento']['retrasos']}"
             return redirect(url_for('home'))
-        return render_template_string(HTML_AUTH, modo='login', error="Acceso denegado")
+        return render_template_string(HTML_AUTH, modo='login', error="Acceso denegado: Datos incorrectos")
     return render_template_string(HTML_AUTH, modo='login')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+# --- RUTAS DE FUNCIONALIDAD ---
 
 @app.route('/')
 def home():
     if 'user' not in session: return redirect(url_for('login'))
-    db = usuarios_db[session['user']]['datos']
-    return render_template_string(HTML_PANEL, usuario=session['user'], **db)
+    user = session['user']
+    if user not in usuarios_db: return redirect(url_for('logout'))
+    db = usuarios_db[user]['datos']
+    return render_template_string(HTML_PANEL, usuario=user, **db)
 
 @app.route('/enviar_tarea_web', methods=['POST'])
 def enviar_tarea_web():
@@ -223,9 +248,9 @@ def enviar_tarea_web():
 def verificar_cambios():
     if 'user' not in session: return jsonify({"update": False})
     user = session['user']
+    if user not in usuarios_db: return jsonify({"update": False})
     db = usuarios_db[user]['datos']
     
-    # Comparamos el estado actual con el guardado en la sesión
     estado_actual = f"{len(db['historial'])}-{db['rendimiento']['exitos']}-{db['rendimiento']['retrasos']}"
     estado_previo = session.get('last_state')
     
@@ -234,12 +259,7 @@ def verificar_cambios():
         return jsonify({"update": True})
     return jsonify({"update": False})
 
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect(url_for('login'))
-
-# --- API PARA LA LAPTOP ---
+# --- API LAPTOP ---
 
 @app.route('/get_data')
 def get_data():
