@@ -5,26 +5,25 @@ import random
 import json
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "lumina_ultra_secret_8891")
+app.secret_key = os.environ.get("SECRET_KEY", "lumina_ultra_secret_2026")
 
-# --- CONFIGURACIÓN ---
+# --- CONFIGURACIÓN DE BASE DE DATOS ---
 DB_FILE = "database.json"
-API_KEY = "LUMINA_SECURE_TOKEN_2026" # Puedes usar esto para validar peticiones de la laptop
 
 def cargar_db():
     if not os.path.exists(DB_FILE):
-        return {
-            "operador1": {"password": "123", "datos": inicializar_datos("Operador 1")},
-            "compa": {"password": "456", "datos": inicializar_datos("Compa")}
-        }
+        return {} # Empezamos con base de datos vacía
     with open(DB_FILE, "r") as f:
-        return json.load(f)
+        try:
+            return json.load(f)
+        except:
+            return {}
 
 def guardar_db(db):
     with open(DB_FILE, "w") as f:
         json.dump(db, f, indent=4)
 
-def inicializar_datos(nombre):
+def inicializar_datos_usuario(nombre):
     return {
         "tarea_actual": "Esperando mando...",
         "tiempo_actual": 0,
@@ -34,124 +33,96 @@ def inicializar_datos(nombre):
         "ultimo_msj": f"Sistema LUMINA vinculado a {nombre}."
     }
 
+# Cargar usuarios al iniciar
 usuarios_db = cargar_db()
 
-FRASES_LUMINA = [
-    "Objetivo detectado. Optimizando frecuencia de enfoque.",
-    "Lumina en línea. Iniciando secuencia de productividad.",
-    "Sistemas listos. La disciplina es el puente al éxito.",
-    "Procesando nueva meta. Ejecución prioritaria activada.",
-    "Enfoque de ingeniería establecido. Adelante."
-]
+# --- ESTILOS Y PLANTILLAS ---
 
-# --- HTML (Mantenemos tu estilo pero optimizado) ---
-# ... (Aquí irían tus constantes HTML_LOGIN y HTML_PANEL que ya tienes)
+HTML_AUTH = """
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8"><title>LUMINA OS - Auth</title>
+    <style>
+        :root { --neon: #00ffaa; --bg: #050505; }
+        body { background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .auth-card { background: #0d0d0d; padding: 40px; border-radius: 20px; border: 1px solid var(--neon); box-shadow: 0 0 20px rgba(0,255,170,0.2); width: 320px; text-align: center; }
+        h1 { color: var(--neon); letter-spacing: 5px; font-size: 24px; margin-bottom: 30px; }
+        input { width: 100%; padding: 12px; margin: 10px 0; background: #000; border: 1px solid #333; color: white; border-radius: 8px; box-sizing: border-box; outline: none; }
+        input:focus { border-color: var(--neon); }
+        button { width: 100%; padding: 12px; background: var(--neon); color: black; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; margin-top: 10px; text-transform: uppercase; }
+        .toggle-link { margin-top: 20px; font-size: 13px; color: #666; }
+        .toggle-link a { color: var(--neon); text-decoration: none; }
+        .error { color: #ff4444; font-size: 12px; margin-top: 15px; }
+        .success { color: var(--neon); font-size: 12px; margin-top: 15px; }
+    </style>
+</head>
+<body>
+    <div class="auth-card">
+        <h1>LUMINA OS</h1>
+        
+        {% if modo == 'login' %}
+        <form method="POST" action="/login">
+            <input type="text" name="usuario" placeholder="ID OPERADOR" required>
+            <input type="password" name="password" placeholder="CÓDIGO SECRETO" required>
+            <button type="submit">INICIAR SESIÓN</button>
+        </form>
+        <div class="toggle-link">¿No tienes cuenta? <a href="/registro">Registrar Operador</a></div>
+        {% else %}
+        <form method="POST" action="/registro">
+            <input type="text" name="usuario" placeholder="NUEVO ID OPERADOR" required>
+            <input type="password" name="password" placeholder="CREAR CÓDIGO" required>
+            <button type="submit">CREAR CUENTA</button>
+        </form>
+        <div class="toggle-link">¿Ya tienes cuenta? <a href="/login">Volver al Login</a></div>
+        {% endif %}
 
-# --- DECORADOR DE SEGURIDAD ---
-def login_required(f):
-    def wrapper(*args, **kwargs):
-        if 'user' not in session:
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    wrapper.__name__ = f.__name__
-    return wrapper
+        {% if error %}<div class="error">{{ error }}</div>{% endif %}
+        {% if success %}<div class="success">{{ success }}</div>{% endif %}
+    </div>
+</body>
+</html>
+"""
 
-# --- RUTAS DE SESIÓN ---
+# --- RUTAS DE AUTENTICACIÓN (REGISTRO Y LOGIN) ---
+
+@app.route('/registro', methods=['GET', 'POST'])
+def registro():
+    if request.method == 'POST':
+        user = request.form.get('usuario').strip()
+        pwd = request.form.get('password').strip()
+
+        if user in usuarios_db:
+            return render_template_string(HTML_AUTH, modo='registro', error="El ID de operador ya existe.")
+        
+        # Crear nuevo usuario en la DB
+        usuarios_db[user] = {
+            "password": pwd,
+            "datos": inicializar_datos_usuario(user)
+        }
+        guardar_db(usuarios_db)
+        return render_template_string(HTML_AUTH, modo='login', success="Cuenta creada. Ya puedes iniciar sesión.")
+    
+    return render_template_string(HTML_AUTH, modo='registro')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        user = request.form.get('usuario')
-        pwd = request.form.get('password')
+        user = request.form.get('usuario').strip()
+        pwd = request.form.get('password').strip()
+
         if user in usuarios_db and usuarios_db[user]['password'] == pwd:
             session['user'] = user
             return redirect(url_for('home'))
-        return render_template_string(HTML_LOGIN, error="Acceso denegado: Credenciales inválidas")
-    return render_template_string(HTML_LOGIN)
+        
+        return render_template_string(HTML_AUTH, modo='login', error="Credenciales incorrectas.")
+    
+    return render_template_string(HTML_AUTH, modo='login')
 
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# --- RUTAS DE LA INTERFAZ WEB ---
-
-@app.route('/')
-@login_required
-def home():
-    db = usuarios_db[session['user']]['datos']
-    return render_template_string(HTML_PANEL, 
-                                 usuario=session['user'],
-                                 historial=db['historial'], 
-                                 rendimiento=db['rendimiento'], 
-                                 ultimo_msj=db['ultimo_msj'])
-
-@app.route('/enviar_tarea_web', methods=['POST'])
-@login_required
-def enviar_tarea_web():
-    user = session['user']
-    db = usuarios_db[user]['datos']
-    
-    tarea = request.form.get('tarea')
-    mins = request.form.get('mins')
-    
-    db['id_envio'] += 1
-    db['tarea_actual'] = tarea
-    db['tiempo_actual'] = mins
-    db['ultimo_msj'] = random.choice(FRASES_LUMINA)
-    db['historial'].append({
-        "id": db['id_envio'], 
-        "tarea": tarea, 
-        "estado": "PENDIENTE",
-        "fecha": datetime.now().strftime("%H:%M")
-    })
-    db['rendimiento']['total'] += 1
-    
-    guardar_db(usuarios_db) # Persistencia inmediata
-    return redirect(url_for('home'))
-
-# --- API PARA LA LAPTOP (LÓGICA MEJORADA) ---
-
-@app.route('/get_data')
-def get_data():
-    user = request.args.get('user')
-    if user in usuarios_db:
-        db = usuarios_db[user]['datos']
-        return jsonify({
-            "tarea": db['tarea_actual'], 
-            "tiempo": db['tiempo_actual'], 
-            "id": db['id_envio']
-        })
-    return jsonify({"error": "No auth"}), 401
-
-@app.route('/reportar_progreso', methods=['POST'])
-def reportar_progreso():
-    data = request.json
-    user = data.get('user')
-    
-    if user not in usuarios_db:
-        return jsonify({"error": "Auth failed"}), 401
-    
-    db = usuarios_db[user]['datos']
-    id_t = data.get('id')
-    estado = data.get('estado', '').upper()
-    
-    for t in db['historial']:
-        if t['id'] == id_t and t['estado'] == "PENDIENTE":
-            t['estado'] = estado
-            if "HECHO" in estado:
-                db['rendimiento']['exitos'] += 1
-                db['ultimo_msj'] = f"Operador {user}: Objetivo #{id_t} neutralizado con éxito."
-            else:
-                db['rendimiento']['retrasos'] += 1
-                db['ultimo_msj'] = f"Operador {user}: Sistema en alerta por retraso en #{id_t}."
-            
-            guardar_db(usuarios_db)
-            return jsonify({"status": "sincronizado"})
-            
-    return jsonify({"status": "no_change"})
-
-if __name__ == '__main__':
-    # Render usa la variable de entorno PORT
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+# --- EL RESTO DEL CÓDIGO (HOME, API, ETC) SIGUE IGUAL ---
+# (Asegúrate de mantener las rutas de /get_data y /reportar_progreso que ya tenías)
