@@ -5,7 +5,8 @@ import random
 import json
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "lumina_proto_2026_key")
+# Usamos una clave fija para evitar que las sesiones se cierren al reiniciar en Render
+app.secret_key = "lumina_proto_2026_key_ultra_secure"
 
 # --- SISTEMA DE PERSISTENCIA ---
 DB_FILE = "database.json"
@@ -31,6 +32,7 @@ def inicializar_perfil(nombre):
         "ultimo_msj": f"Sistemas LUMINA inicializados para {nombre}."
     }
 
+# Carga inicial de datos
 usuarios_db = cargar_db()
 
 FRASES_LUMINA = [
@@ -40,7 +42,7 @@ FRASES_LUMINA = [
     "Enfoque de ingeniería establecido. Adelante."
 ]
 
-# --- VISTAS HTML (LOGIN / REGISTRO / PANEL) ---
+# --- VISTAS HTML ---
 
 HTML_AUTH = """
 <!DOCTYPE html>
@@ -89,17 +91,19 @@ HTML_PANEL = """
         .container { max-width: 500px; margin: auto; }
         .user-bar { display: flex; justify-content: space-between; font-size: 10px; color: var(--neon); margin-bottom: 15px; text-transform: uppercase; }
         h1 { color: var(--neon); text-align: center; letter-spacing: 5px; text-shadow: 0 0 10px var(--neon); }
-        .console { background: rgba(0,255,170,0.05); border-left: 3px solid var(--neon); padding: 15px; margin-bottom: 20px; font-family: monospace; color: var(--neon); }
+        .console { background: rgba(0,255,170,0.05); border-left: 3px solid var(--neon); padding: 15px; margin-bottom: 20px; font-family: monospace; color: var(--neon); min-height: 40px; }
         .card { background: var(--card); border: 1px solid #222; border-radius: 15px; padding: 20px; margin-bottom: 20px; }
         input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #333; background: #000; color: white; box-sizing: border-box; }
         .main-btn { width: 100%; padding: 15px; border-radius: 10px; background: var(--neon); color: black; font-weight: bold; border: none; cursor: pointer; box-shadow: 0 0 10px var(--neon); }
         .stats { display: flex; justify-content: space-around; text-align: center; }
         .stat-num { display: block; font-size: 24px; color: var(--neon); font-weight: bold; }
         .stat-label { font-size: 9px; color: #666; text-transform: uppercase; }
-        table { width: 100%; margin-top: 10px; font-size: 13px; }
-        .badge { padding: 3px 7px; border-radius: 4px; font-size: 10px; border: 1px solid; }
+        table { width: 100%; margin-top: 10px; font-size: 13px; border-collapse: collapse; }
+        td { padding: 8px 0; border-bottom: 1px solid #222; }
+        .badge { padding: 3px 7px; border-radius: 4px; font-size: 10px; border: 1px solid; text-transform: uppercase; }
         .hecho { color: var(--neon); border-color: var(--neon); }
         .retraso { color: #ff4444; border-color: #ff4444; }
+        .pendiente { color: #888; border-color: #444; }
     </style>
 </head>
 <body>
@@ -129,7 +133,11 @@ HTML_PANEL = """
                 {% for item in historial[::-1][:5] %}
                 <tr>
                     <td>{{ item.tarea }}<br><small style="color:#444;">{{ item.fecha }}</small></td>
-                    <td style="text-align:right;"><span class="badge {{ 'hecho' if item.estado == 'HECHO' else 'retraso' if 'RET' in item.estado else '' }}">{{ item.estado }}</span></td>
+                    <td style="text-align:right;">
+                        <span class="badge {{ 'hecho' if item.estado == 'HECHO' else 'retraso' if 'RET' in item.estado else 'pendiente' }}">
+                            {{ item.estado }}
+                        </span>
+                    </td>
                 </tr>
                 {% endfor %}
             </table>
@@ -139,16 +147,21 @@ HTML_PANEL = """
     <script>
         function hablar(t) {
             if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
                 const m = new SpeechSynthesisUtterance(t.replace("> LUMINA:", ""));
-                m.lang = 'es-MX'; window.speechSynthesis.speak(m);
+                m.lang = 'es-MX'; 
+                window.speechSynthesis.speak(m);
             }
         }
         window.onload = () => { hablar(document.getElementById('msj-texto').innerText); };
+
         setInterval(async () => {
-            const r = await fetch('/verificar_cambios');
-            const d = await r.json();
-            if (d.update) window.location.reload();
-        }, 4000);
+            try {
+                const r = await fetch('/verificar_cambios');
+                const d = await r.json();
+                if (d.update) window.location.reload();
+            } catch (e) {}
+        }, 3000);
     </script>
 </body>
 </html>
@@ -159,7 +172,8 @@ HTML_PANEL = """
 @app.route('/registro', methods=['GET', 'POST'])
 def registro():
     if request.method == 'POST':
-        u, p = request.form.get('usuario').strip(), request.form.get('password').strip()
+        u = request.form.get('usuario').strip()
+        p = request.form.get('password').strip()
         if u in usuarios_db: return render_template_string(HTML_AUTH, modo='registro', error="ID ya existe")
         usuarios_db[u] = {"password": p, "datos": inicializar_perfil(u)}
         guardar_db(usuarios_db)
@@ -169,9 +183,13 @@ def registro():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        u, p = request.form.get('usuario').strip(), request.form.get('password').strip()
+        u = request.form.get('usuario').strip()
+        p = request.form.get('password').strip()
         if u in usuarios_db and usuarios_db[u]['password'] == p:
             session['user'] = u
+            # Inicializamos el estado en la sesión para evitar bucles de recarga
+            db = usuarios_db[u]['datos']
+            session['last_state'] = f"{len(db['historial'])}-{db['rendimiento']['exitos']}-{db['rendimiento']['retrasos']}"
             return redirect(url_for('home'))
         return render_template_string(HTML_AUTH, modo='login', error="Acceso denegado")
     return render_template_string(HTML_AUTH, modo='login')
@@ -185,11 +203,18 @@ def home():
 @app.route('/enviar_tarea_web', methods=['POST'])
 def enviar_tarea_web():
     if 'user' not in session: return redirect(url_for('login'))
-    db = usuarios_db[session['user']]['datos']
+    user = session['user']
+    db = usuarios_db[user]['datos']
     db['id_envio'] += 1
-    db['tarea_actual'], db['tiempo_actual'] = request.form.get('tarea'), request.form.get('mins')
+    db['tarea_actual'] = request.form.get('tarea')
+    db['tiempo_actual'] = request.form.get('mins')
     db['ultimo_msj'] = random.choice(FRASES_LUMINA)
-    db['historial'].append({"id": db['id_envio'], "tarea": db['tarea_actual'], "estado": "PENDIENTE", "fecha": datetime.now().strftime("%H:%M")})
+    db['historial'].append({
+        "id": db['id_envio'], 
+        "tarea": db['tarea_actual'], 
+        "estado": "PENDIENTE", 
+        "fecha": datetime.now().strftime("%H:%M")
+    })
     db['rendimiento']['total'] += 1
     guardar_db(usuarios_db)
     return redirect(url_for('home'))
@@ -197,9 +222,17 @@ def enviar_tarea_web():
 @app.route('/verificar_cambios')
 def verificar_cambios():
     if 'user' not in session: return jsonify({"update": False})
-    db = usuarios_db[session['user']]['datos']
-    # Una forma simple de ver si algo cambió: el número de ítems o mensajes
-    return jsonify({"update": False}) # Aquí podrías comparar un hash si quisieras
+    user = session['user']
+    db = usuarios_db[user]['datos']
+    
+    # Comparamos el estado actual con el guardado en la sesión
+    estado_actual = f"{len(db['historial'])}-{db['rendimiento']['exitos']}-{db['rendimiento']['retrasos']}"
+    estado_previo = session.get('last_state')
+    
+    if estado_previo != estado_actual:
+        session['last_state'] = estado_actual
+        return jsonify({"update": True})
+    return jsonify({"update": False})
 
 @app.route('/logout')
 def logout():
@@ -207,6 +240,7 @@ def logout():
     return redirect(url_for('login'))
 
 # --- API PARA LA LAPTOP ---
+
 @app.route('/get_data')
 def get_data():
     user = request.args.get('user')
@@ -224,8 +258,12 @@ def reportar():
         for t in db['historial']:
             if t['id'] == data.get('id') and t['estado'] == "PENDIENTE":
                 t['estado'] = data.get('estado').upper()
-                if t['estado'] == "HECHO": db['rendimiento']['exitos'] += 1
-                else: db['rendimiento']['retrasos'] += 1
+                if t['estado'] == "HECHO":
+                    db['rendimiento']['exitos'] += 1
+                    db['ultimo_msj'] = f"Objetivo de {user} completado con éxito."
+                else:
+                    db['rendimiento']['retrasos'] += 1
+                    db['ultimo_msj'] = f"Retraso detectado en la misión de {user}."
                 guardar_db(usuarios_db)
                 return jsonify({"ok": True})
     return jsonify({"ok": False}), 400
