@@ -252,22 +252,24 @@ def reportar():
     user = data.get('user')
     if user in usuarios_db:
         db_user = usuarios_db[user]['datos']
-        
-        # --- SEGURIDAD: Intentamos obtener el nombre de la tarea ---
-        # 1. Prioridad: Si la App de escritorio envía el nombre en el JSON (tarea_nombre)
-        # 2. Respaldo: Lo que el servidor tiene en memoria (tarea_actual)
-        tarea_realizada = data.get('tarea_nombre', db_user['tarea_actual'])
-        
-        # Si por error el sistema ya limpió la tarea y dice "Misión Cumplida", 
-        # ignoramos este reporte duplicado para no borrar el nombre real en la tabla.
-        if tarea_realizada in ["Misión Cumplida", "Finalizada con Retraso", "Esperando mando..."]:
-            return jsonify({"ok": True, "info": "Estado ya procesado"})
-
         es_retraso = data.get('estado') == "RETRASO"
         
+        # --- LÓGICA DE RECUERDO DE TAREA ---
+        # Si la App envía el nombre lo usamos, si no, usamos el del servidor.
+        tarea_nombre = data.get('tarea_nombre', db_user['tarea_actual'])
+        
+        # AJUSTE: Si el servidor ya procesó un "ÉXITO" (Misión Cumplida), ignoramos duplicados de éxito.
+        # Pero si es un RETRASO, permitimos que se registre SIEMPRE para evitar que se pierdan.
+        if not es_retraso and tarea_nombre in ["Misión Cumplida", "Finalizada con Retraso"]:
+            return jsonify({"ok": True, "info": "Ya procesado"})
+
+        # Evitamos guardar mensajes de sistema como nombres de tarea en el log
+        if tarea_nombre == "Esperando mando..." and not es_retraso:
+             return jsonify({"ok": True})
+
         nueva_entrada = {
             "usuario": user,
-            "tarea": tarea_realizada, 
+            "tarea": tarea_nombre, 
             "fecha": datetime.now().strftime("%H:%M - %d/%m"),
             "enviado_por": db_user.get('enviado_por', 'Sistema'),
             "retraso": es_retraso
@@ -276,7 +278,7 @@ def reportar():
         if "log_global" not in usuarios_db: usuarios_db["log_global"] = []
         usuarios_db["log_global"].append(nueva_entrada)
         
-        # Actualizar contadores y estado
+        # Actualizar contadores y limpiar estado actual
         if es_retraso:
             db_user['rendimiento']['retrasos'] += 1
             db_user['tarea_actual'] = "Finalizada con Retraso"
@@ -325,6 +327,14 @@ def verificar_cambios():
 def logout():
     session.clear()
     return redirect(url_for('registro'))
+
+@app.route('/eliminar_operador/<u_name>')
+def eliminar_operador(u_name):
+    if 'user' in session and session['user'] == 'operador1':
+        if u_name in usuarios_db and u_name != 'operador1':
+            del usuarios_db[u_name]
+            guardar_db(usuarios_db)
+    return redirect(url_for('home'))
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
