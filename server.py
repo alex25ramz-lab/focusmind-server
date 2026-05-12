@@ -48,7 +48,7 @@ FRASES_LUMINA = [
     "Enfoque de ingeniería establecido. Adelante."
 ]
 
-# --- VISTAS HTML ---
+# --- VISTAS HTML (Sin cambios en diseño, solo lógica de visualización) ---
 
 HTML_AUTH = """
 <!DOCTYPE html>
@@ -254,19 +254,16 @@ def reportar():
         db_user = usuarios_db[user]['datos']
         es_retraso = data.get('estado') == "RETRASO"
         
-        # --- LÓGICA DE RECUERDO DE TAREA ---
-        # Si la App envía el nombre lo usamos, si no, usamos el del servidor.
+        # --- LÓGICA DE REGISTRO COMPLETA ---
+        # 1. Obtenemos el nombre de la tarea (el programa debe enviarlo en el JSON)
+        # Si no viene en el JSON, usamos lo último que tenemos en la DB
         tarea_nombre = data.get('tarea_nombre', db_user['tarea_actual'])
         
-        # AJUSTE: Si el servidor ya procesó un "ÉXITO" (Misión Cumplida), ignoramos duplicados de éxito.
-        # Pero si es un RETRASO, permitimos que se registre SIEMPRE para evitar que se pierdan.
-        if not es_retraso and tarea_nombre in ["Misión Cumplida", "Finalizada con Retraso"]:
-            return jsonify({"ok": True, "info": "Ya procesado"})
-
-        # Evitamos guardar mensajes de sistema como nombres de tarea en el log
+        # 2. Ignoramos si es un mensaje de estado vacío
         if tarea_nombre == "Esperando mando..." and not es_retraso:
              return jsonify({"ok": True})
 
+        # 3. Creamos la entrada para el Log Global del Restaurante
         nueva_entrada = {
             "usuario": user,
             "tarea": tarea_nombre, 
@@ -278,7 +275,7 @@ def reportar():
         if "log_global" not in usuarios_db: usuarios_db["log_global"] = []
         usuarios_db["log_global"].append(nueva_entrada)
         
-        # Actualizar contadores y limpiar estado actual
+        # 4. Actualizamos estadísticas del operador
         if es_retraso:
             db_user['rendimiento']['retrasos'] += 1
             db_user['tarea_actual'] = "Finalizada con Retraso"
@@ -287,7 +284,7 @@ def reportar():
             db_user['tarea_actual'] = "Misión Cumplida"
             
         guardar_db(usuarios_db)
-        return jsonify({"ok": True})
+        return jsonify({"ok": True, "msg": "Misión registrada en el servidor"})
     return jsonify({"ok": False}), 400
 
 @app.route('/enviar_tarea_web', methods=['POST'])
@@ -310,7 +307,12 @@ def get_data():
     user = request.args.get('user')
     if user in usuarios_db:
         d = usuarios_db[user]['datos']
-        return jsonify({"tarea": d['tarea_actual'], "tiempo": d['tiempo_actual'], "id": d['id_envio'], "remitente": d['enviado_por']})
+        return jsonify({
+            "tarea": d['tarea_actual'], 
+            "tiempo": d['tiempo_actual'], 
+            "id": d['id_envio'], 
+            "remitente": d['enviado_por']
+        })
     return jsonify({"error": "No user"}), 404
 
 @app.route('/verificar_cambios')
