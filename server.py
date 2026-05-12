@@ -15,7 +15,7 @@ def inicializar_perfil(nombre):
         "tarea_actual": "Esperando mando...",
         "tiempo_actual": 0,
         "id_envio": 0,
-        "enviado_por": "Sistema", # Nueva variable para saber quién mandó la tarea
+        "enviado_por": "Sistema", 
         "historial": [], 
         "rendimiento": {"exitos": 0, "retrasos": 0, "total": 0},
         "ultimo_msj": f"Sistemas LUMINA inicializados para {nombre}."
@@ -116,7 +116,17 @@ HTML_PANEL = """
         .log-user { color: var(--neon); font-weight: bold; width: 85px; flex-shrink: 0; }
         .log-task { color: #eee; flex-grow: 1; margin: 0 10px; }
         .log-meta { color: var(--gray); font-size: 9px; text-align: right; line-height: 1.2; }
-        .status-retraso { color: var(--red); font-weight: bold; font-size: 9px; text-transform: uppercase; display: block; }
+        .status-retraso { 
+            color: var(--red); 
+            font-weight: bold; 
+            font-size: 9px; 
+            text-transform: uppercase; 
+            display: inline-block;
+            border: 1px solid var(--red);
+            padding: 1px 4px;
+            margin-top: 3px;
+            border-radius: 3px;
+        }
     </style>
 </head>
 <body>
@@ -177,7 +187,7 @@ HTML_PANEL = """
                     <div class="log-item">
                         <span class="log-user">{{ log.usuario }}</span>
                         <span class="log-task">
-                            {{ log.tarea }}
+                            {{ log.tarea }}<br>
                             {% if log.retraso %}<span class="status-retraso">! Misión con Retraso</span>{% endif %}
                         </span>
                         <div class="log-meta">
@@ -242,11 +252,14 @@ def reportar():
     user = data.get('user')
     if user in usuarios_db:
         db_user = usuarios_db[user]['datos']
+        
+        # CORRECCIÓN: Guardamos el nombre real de la tarea antes de borrarla del estado actual
+        tarea_realizada = db_user['tarea_actual']
         es_retraso = data.get('estado') == "RETRASO"
         
         nueva_entrada = {
             "usuario": user,
-            "tarea": db_user['tarea_actual'],
+            "tarea": tarea_realizada, 
             "fecha": datetime.now().strftime("%H:%M - %d/%m"),
             "enviado_por": db_user.get('enviado_por', 'Sistema'),
             "retraso": es_retraso
@@ -255,10 +268,13 @@ def reportar():
         if "log_global" not in usuarios_db: usuarios_db["log_global"] = []
         usuarios_db["log_global"].append(nueva_entrada)
         
-        if es_retraso: db_user['rendimiento']['retrasos'] += 1
-        else: db_user['rendimiento']['exitos'] += 1
-        
-        db_user['tarea_actual'] = "Misión Finalizada" if not es_retraso else "Finalizada con Retraso"
+        if es_retraso:
+            db_user['rendimiento']['retrasos'] += 1
+            db_user['tarea_actual'] = "Finalizada con Retraso"
+        else:
+            db_user['rendimiento']['exitos'] += 1
+            db_user['tarea_actual'] = "Misión Cumplida"
+            
         guardar_db(usuarios_db)
         return jsonify({"ok": True})
     return jsonify({"ok": False}), 400
@@ -272,7 +288,7 @@ def enviar_tarea_web():
         d['id_envio'] += 1
         d['tarea_actual'] = request.form.get('tarea')
         d['tiempo_actual'] = int(request.form.get('mins'))
-        d['enviado_por'] = session['user'] # Guardamos quién mandó la tarea
+        d['enviado_por'] = session['user'] 
         d['ultimo_msj'] = random.choice(FRASES_LUMINA)
         d['rendimiento']['total'] += 1
         guardar_db(usuarios_db)
@@ -290,7 +306,6 @@ def get_data():
 def verificar_cambios():
     if 'user' not in session: return jsonify({"update": False})
     num_logs = len(usuarios_db.get('log_global', []))
-    # Detectamos cambios en éxitos, retrasos y tareas actuales de todo el equipo
     estado_equipo = f"logs:{num_logs}-" + "-".join([f"{u}:{usuarios_db[u]['datos']['rendimiento']['exitos']}:{usuarios_db[u]['datos']['rendimiento']['retrasos']}" for u in usuarios_db if u != 'log_global'])
     if session.get('last_state') != estado_equipo:
         session['last_state'] = estado_equipo
