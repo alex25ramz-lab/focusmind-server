@@ -253,8 +253,16 @@ def reportar():
     if user in usuarios_db:
         db_user = usuarios_db[user]['datos']
         
-        # CORRECCIÓN: Guardamos el nombre real de la tarea antes de borrarla del estado actual
-        tarea_realizada = db_user['tarea_actual']
+        # --- SEGURIDAD: Intentamos obtener el nombre de la tarea ---
+        # 1. Prioridad: Si la App de escritorio envía el nombre en el JSON (tarea_nombre)
+        # 2. Respaldo: Lo que el servidor tiene en memoria (tarea_actual)
+        tarea_realizada = data.get('tarea_nombre', db_user['tarea_actual'])
+        
+        # Si por error el sistema ya limpió la tarea y dice "Misión Cumplida", 
+        # ignoramos este reporte duplicado para no borrar el nombre real en la tabla.
+        if tarea_realizada in ["Misión Cumplida", "Finalizada con Retraso", "Esperando mando..."]:
+            return jsonify({"ok": True, "info": "Estado ya procesado"})
+
         es_retraso = data.get('estado') == "RETRASO"
         
         nueva_entrada = {
@@ -268,6 +276,7 @@ def reportar():
         if "log_global" not in usuarios_db: usuarios_db["log_global"] = []
         usuarios_db["log_global"].append(nueva_entrada)
         
+        # Actualizar contadores y estado
         if es_retraso:
             db_user['rendimiento']['retrasos'] += 1
             db_user['tarea_actual'] = "Finalizada con Retraso"
