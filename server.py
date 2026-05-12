@@ -15,13 +15,12 @@ def inicializar_perfil(nombre):
         "tarea_actual": "Esperando mando...",
         "tiempo_actual": 0,
         "id_envio": 0,
-        "historial": [],
+        "historial": [],  # Aquí guardaremos las tareas completadas
         "rendimiento": {"exitos": 0, "retrasos": 0, "total": 0},
         "ultimo_msj": f"Sistemas LUMINA inicializados para {nombre}."
     }
 
 def cargar_db():
-    # El operador1 siempre tendrá la clave 123
     cuentas_maestras = {
         "operador1": {"password": "123", "datos": inicializar_perfil("Operador 1")}
     }
@@ -31,6 +30,8 @@ def cargar_db():
         try: 
             data = json.load(f)
             if "operador1" not in data: data["operador1"] = cuentas_maestras["operador1"]
+            # Asegurar que exista una lista global de logs si no existe
+            if "log_global" not in data: data["log_global"] = []
             return data
         except: return cuentas_maestras
 
@@ -79,12 +80,10 @@ HTML_AUTH = """
         {% if error %}<div class="error">{{ error }}</div>{% endif %}
         <div class="info">Acceso restringido para Operador 1.</div>
     </div>
-
     <script>
         function checkUser() {
             const user = document.getElementById('user_input').value;
             const passField = document.getElementById('pass_field');
-            // Si el usuario escribe 'operador1', mostramos el campo de contraseña
             if (user.toLowerCase() === 'operador1') {
                 passField.style.display = 'block';
             } else {
@@ -96,14 +95,13 @@ HTML_AUTH = """
 </html>
 """
 
-# (El resto del HTML_PANEL se mantiene igual que en tu versión anterior)
 HTML_PANEL = """
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8"><title>LUMINA OS - Panel</title>
     <style>
-        :root { --neon: #00ffaa; --bg: #050505; --card: #0d0d0d; --red: #ff4444; }
+        :root { --neon: #00ffaa; --bg: #050505; --card: #0d0d0d; --red: #ff4444; --gray: #888; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: white; padding: 20px; }
         .container { max-width: 550px; margin: auto; }
         .user-bar { display: flex; justify-content: space-between; font-size: 10px; color: var(--neon); margin-bottom: 15px; text-transform: uppercase; }
@@ -117,6 +115,12 @@ HTML_PANEL = """
         .badge-ok { color: var(--neon); font-weight: bold; font-size: 15px; }
         .del-btn { color: var(--red); text-decoration: none; font-size: 10px; border: 1px solid var(--red); padding: 2px 5px; border-radius: 4px; }
         .label-neon { font-size: 10px; color: var(--neon); text-transform: uppercase; display: block; margin-bottom: 5px; }
+        
+        /* Estilos para el Historial */
+        .log-item { border-bottom: 1px solid #1a1a1a; padding: 8px 0; display: flex; justify-content: space-between; font-size: 11px; }
+        .log-user { color: var(--neon); font-weight: bold; width: 80px; }
+        .log-task { color: #eee; flex-grow: 1; margin: 0 10px; }
+        .log-time { color: var(--gray); font-size: 9px; }
     </style>
 </head>
 <body>
@@ -148,7 +152,7 @@ HTML_PANEL = """
                     <td style="text-align:center;">ÉXITOS</td>
                     <td style="text-align:right;">GESTIÓN</td>
                 </tr>
-                {% for op_name, op_info in equipo.items() %}
+                {% for op_name, op_info in equipo.items() if op_name != 'log_global' %}
                 <tr>
                     <td style="color:var(--neon);">{{ op_name }}</td>
                     <td style="font-size:11px;">{{ op_info.datos.tarea_actual }}</td>
@@ -163,6 +167,23 @@ HTML_PANEL = """
             </table>
             <div style="text-align:center; margin-top:15px;">
                 <a href="/registro" style="color:var(--neon); font-size:11px; text-decoration:none;">+ AÑADIR NUEVO MIEMBRO</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <span class="label-neon">Registro de Misiones Completadas</span>
+            <div style="max-height: 200px; overflow-y: auto; margin-top: 10px;">
+                {% if log_global %}
+                    {% for log in log_global[::-1] %}
+                    <div class="log-item">
+                        <span class="log-user">{{ log.usuario }}</span>
+                        <span class="log-task">{{ log.tarea }}</span>
+                        <span class="log-time">{{ log.fecha }}</span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div style="color:#444; font-size:11px; text-align:center;">No hay registros aún.</div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -187,7 +208,6 @@ def registro():
         u = request.form.get('usuario').strip()
         p = request.form.get('password', '').strip()
         
-        # CASO ESPECIAL: OPERADOR 1
         if u.lower() == 'operador1':
             if p == usuarios_db['operador1']['password']:
                 session['user'] = 'operador1'
@@ -195,7 +215,6 @@ def registro():
             else:
                 return render_template_string(HTML_AUTH, error="CÓDIGO INCORRECTO")
         
-        # CASO OTROS USUARIOS: Entran directo
         if u not in usuarios_db:
             usuarios_db[u] = {"password": "123", "datos": inicializar_perfil(u)}
             guardar_db(usuarios_db)
@@ -205,10 +224,6 @@ def registro():
         
     return render_template_string(HTML_AUTH)
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    return redirect(url_for('registro'))
-
 @app.route('/')
 def home():
     if 'user' not in session: return redirect(url_for('registro'))
@@ -216,13 +231,42 @@ def home():
     if user not in usuarios_db: return redirect(url_for('logout'))
     return render_template_string(HTML_PANEL, 
                                 usuario=user, 
-                                lista_usuarios=list(usuarios_db.keys()),
-                                equipo=usuarios_db,
+                                lista_usuarios=[k for k in usuarios_db.keys() if k != 'log_global'],
+                                equipo={k: v for k, v in usuarios_db.items() if k != 'log_global'},
+                                log_global=usuarios_db.get('log_global', []),
                                 **usuarios_db[user]['datos'])
 
+@app.route('/reportar_progreso', methods=['POST'])
+def reportar():
+    data = request.json
+    user = data.get('user')
+    if user in usuarios_db:
+        db_user = usuarios_db[user]['datos']
+        if data.get('estado') == "HECHO":
+            # Guardar en el log global antes de limpiar la tarea
+            nueva_entrada = {
+                "usuario": user,
+                "tarea": db_user['tarea_actual'],
+                "fecha": datetime.now().strftime("%H:%M - %d/%m")
+            }
+            if "log_global" not in usuarios_db: usuarios_db["log_global"] = []
+            usuarios_db["log_global"].append(nueva_entrada)
+            
+            # Limitar log a los últimos 50 registros para no saturar
+            if len(usuarios_db["log_global"]) > 50: usuarios_db["log_global"].pop(0)
+
+            db_user['rendimiento']['exitos'] += 1
+            db_user['tarea_actual'] = "Misión Cumplida"
+        else:
+            db_user['rendimiento']['retrasos'] += 1
+            
+        guardar_db(usuarios_db)
+        return jsonify({"ok": True})
+    return jsonify({"ok": False}), 400
+
+# [Las demás rutas se mantienen igual]
 @app.route('/eliminar_operador/<nombre>')
 def eliminar_operador(nombre):
-    # Solo el operador1 puede eliminar a otros
     if session.get('user') == 'operador1':
         if nombre in usuarios_db and nombre != 'operador1':
             del usuarios_db[nombre]
@@ -234,12 +278,12 @@ def enviar_tarea_web():
     if 'user' not in session: return redirect(url_for('registro'))
     dest = request.form.get('destinatario')
     if dest in usuarios_db:
-        db = usuarios_db[dest]['datos']
-        db['id_envio'] += 1
-        db['tarea_actual'] = request.form.get('tarea')
-        db['tiempo_actual'] = int(request.form.get('mins'))
-        db['ultimo_msj'] = random.choice(FRASES_LUMINA)
-        db['rendimiento']['total'] += 1
+        d = usuarios_db[dest]['datos']
+        d['id_envio'] += 1
+        d['tarea_actual'] = request.form.get('tarea')
+        d['tiempo_actual'] = int(request.form.get('mins'))
+        d['ultimo_msj'] = random.choice(FRASES_LUMINA)
+        d['rendimiento']['total'] += 1
         guardar_db(usuarios_db)
     return redirect(url_for('home'))
 
@@ -247,29 +291,16 @@ def enviar_tarea_web():
 def get_data():
     user = request.args.get('user')
     if user in usuarios_db:
-        db = usuarios_db[user]['datos']
-        return jsonify({"tarea": db['tarea_actual'], "tiempo": db['tiempo_actual'], "id": db['id_envio']})
+        d = usuarios_db[user]['datos']
+        return jsonify({"tarea": d['tarea_actual'], "tiempo": d['tiempo_actual'], "id": d['id_envio']})
     return jsonify({"error": "No user"}), 404
-
-@app.route('/reportar_progreso', methods=['POST'])
-def reportar():
-    data = request.json
-    user = data.get('user')
-    if user in usuarios_db:
-        db = usuarios_db[user]['datos']
-        if data.get('estado') == "HECHO":
-            db['rendimiento']['exitos'] += 1
-            db['tarea_actual'] = "Misión Cumplida"
-        else:
-            db['rendimiento']['retrasos'] += 1
-        guardar_db(usuarios_db)
-        return jsonify({"ok": True})
-    return jsonify({"ok": False}), 400
 
 @app.route('/verificar_cambios')
 def verificar_cambios():
     if 'user' not in session: return jsonify({"update": False})
-    estado_equipo = "-".join([f"{u}:{usuarios_db[u]['datos']['rendimiento']['exitos']}:{usuarios_db[u]['datos']['tarea_actual']}" for u in usuarios_db])
+    # Incluimos el conteo de logs en la verificación para que refresque cuando alguien termina algo
+    num_logs = len(usuarios_db.get('log_global', []))
+    estado_equipo = f"logs:{num_logs}-" + "-".join([f"{u}:{usuarios_db[u]['datos']['rendimiento']['exitos']}:{usuarios_db[u]['datos']['tarea_actual']}" for u in usuarios_db if u != 'log_global'])
     if session.get('last_state') != estado_equipo:
         session['last_state'] = estado_equipo
         return jsonify({"update": True})
