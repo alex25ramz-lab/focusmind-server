@@ -15,7 +15,8 @@ def inicializar_perfil(nombre):
         "tarea_actual": "Esperando mando...",
         "tiempo_actual": 0,
         "id_envio": 0,
-        "historial": [],  # Aquí guardaremos las tareas completadas
+        "enviado_por": "Sistema", # Nueva variable para saber quién mandó la tarea
+        "historial": [], 
         "rendimiento": {"exitos": 0, "retrasos": 0, "total": 0},
         "ultimo_msj": f"Sistemas LUMINA inicializados para {nombre}."
     }
@@ -30,7 +31,6 @@ def cargar_db():
         try: 
             data = json.load(f)
             if "operador1" not in data: data["operador1"] = cuentas_maestras["operador1"]
-            # Asegurar que exista una lista global de logs si no existe
             if "log_global" not in data: data["log_global"] = []
             return data
         except: return cuentas_maestras
@@ -64,7 +64,6 @@ HTML_AUTH = """
         input:focus { border-color: var(--neon); }
         button { width: 100%; padding: 12px; background: var(--neon); color: black; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; margin-top: 10px; }
         .error { color: #ff4444; font-size: 12px; margin-top: 10px; }
-        .info { color: #555; font-size: 11px; margin-top: 15px; }
     </style>
 </head>
 <body>
@@ -78,17 +77,13 @@ HTML_AUTH = """
             <button type="submit">INICIAR SISTEMA</button>
         </form>
         {% if error %}<div class="error">{{ error }}</div>{% endif %}
-        <div class="info">Acceso restringido para Operador 1.</div>
     </div>
     <script>
         function checkUser() {
             const user = document.getElementById('user_input').value;
             const passField = document.getElementById('pass_field');
-            if (user.toLowerCase() === 'operador1') {
-                passField.style.display = 'block';
-            } else {
-                passField.style.display = 'none';
-            }
+            if (user.toLowerCase() === 'operador1') { passField.style.display = 'block'; } 
+            else { passField.style.display = 'none'; }
         }
     </script>
 </body>
@@ -113,14 +108,15 @@ HTML_PANEL = """
         table { width: 100%; margin-top: 10px; font-size: 12px; border-collapse: collapse; }
         td { padding: 12px 5px; border-bottom: 1px solid #222; }
         .badge-ok { color: var(--neon); font-weight: bold; font-size: 15px; }
+        .badge-red { color: var(--red); font-weight: bold; font-size: 15px; }
         .del-btn { color: var(--red); text-decoration: none; font-size: 10px; border: 1px solid var(--red); padding: 2px 5px; border-radius: 4px; }
         .label-neon { font-size: 10px; color: var(--neon); text-transform: uppercase; display: block; margin-bottom: 5px; }
         
-        /* Estilos para el Historial */
-        .log-item { border-bottom: 1px solid #1a1a1a; padding: 8px 0; display: flex; justify-content: space-between; font-size: 11px; }
-        .log-user { color: var(--neon); font-weight: bold; width: 80px; }
+        .log-item { border-bottom: 1px solid #1a1a1a; padding: 8px 0; display: flex; align-items: center; font-size: 11px; }
+        .log-user { color: var(--neon); font-weight: bold; width: 85px; flex-shrink: 0; }
         .log-task { color: #eee; flex-grow: 1; margin: 0 10px; }
-        .log-time { color: var(--gray); font-size: 9px; }
+        .log-meta { color: var(--gray); font-size: 9px; text-align: right; line-height: 1.2; }
+        .status-retraso { color: var(--red); font-weight: bold; font-size: 9px; text-transform: uppercase; display: block; }
     </style>
 </head>
 <body>
@@ -149,14 +145,17 @@ HTML_PANEL = """
                 <tr style="color:#555; font-size:9px;">
                     <td>OPERADOR</td>
                     <td>ESTADO ACTUAL</td>
-                    <td style="text-align:center;">ÉXITOS</td>
+                    <td style="text-align:center;">ÉXITOS / RETRASOS</td>
                     <td style="text-align:right;">GESTIÓN</td>
                 </tr>
                 {% for op_name, op_info in equipo.items() if op_name != 'log_global' %}
                 <tr>
                     <td style="color:var(--neon);">{{ op_name }}</td>
-                    <td style="font-size:11px;">{{ op_info.datos.tarea_actual }}</td>
-                    <td style="text-align:center;" class="badge-ok">{{ op_info.datos.rendimiento.exitos }}</td>
+                    <td style="font-size:11px;">{{ op_info.datos.tarea_actual }} <br> <small style="color:#555;">vía: {{ op_info.datos.enviado_por }}</small></td>
+                    <td style="text-align:center;">
+                        <span class="badge-ok">{{ op_info.datos.rendimiento.exitos }}</span> / 
+                        <span class="badge-red">{{ op_info.datos.rendimiento.retrasos }}</span>
+                    </td>
                     <td style="text-align:right;">
                         {% if op_name != 'operador1' %}
                             <a href="/eliminar_operador/{{ op_name }}" class="del-btn" onclick="return confirm('¿Eliminar?')">BORRAR</a>
@@ -172,17 +171,23 @@ HTML_PANEL = """
 
         <div class="card">
             <span class="label-neon">Registro de Misiones Completadas</span>
-            <div style="max-height: 200px; overflow-y: auto; margin-top: 10px;">
+            <div style="max-height: 250px; overflow-y: auto; margin-top: 10px;">
                 {% if log_global %}
                     {% for log in log_global[::-1] %}
                     <div class="log-item">
                         <span class="log-user">{{ log.usuario }}</span>
-                        <span class="log-task">{{ log.tarea }}</span>
-                        <span class="log-time">{{ log.fecha }}</span>
+                        <span class="log-task">
+                            {{ log.tarea }}
+                            {% if log.retraso %}<span class="status-retraso">! Misión con Retraso</span>{% endif %}
+                        </span>
+                        <div class="log-meta">
+                            {{ log.fecha }}<br>
+                            <span style="color:#444;">Por: {{ log.enviado_por }}</span>
+                        </div>
                     </div>
                     {% endfor %}
                 {% else %}
-                    <div style="color:#444; font-size:11px; text-align:center;">No hay registros aún.</div>
+                    <div style="color:#444; font-size:11px; text-align:center;">Esperando reportes...</div>
                 {% endif %}
             </div>
         </div>
@@ -200,28 +205,23 @@ HTML_PANEL = """
 </html>
 """
 
-# --- RUTAS DE SISTEMA ---
+# --- RUTAS ---
 
 @app.route('/registro', methods=['GET', 'POST'])
 def registro():
     if request.method == 'POST':
         u = request.form.get('usuario').strip()
         p = request.form.get('password', '').strip()
-        
         if u.lower() == 'operador1':
             if p == usuarios_db['operador1']['password']:
                 session['user'] = 'operador1'
                 return redirect(url_for('home'))
-            else:
-                return render_template_string(HTML_AUTH, error="CÓDIGO INCORRECTO")
-        
+            else: return render_template_string(HTML_AUTH, error="CÓDIGO INCORRECTO")
         if u not in usuarios_db:
             usuarios_db[u] = {"password": "123", "datos": inicializar_perfil(u)}
             guardar_db(usuarios_db)
-        
         session['user'] = u
         return redirect(url_for('home'))
-        
     return render_template_string(HTML_AUTH)
 
 @app.route('/')
@@ -242,36 +242,26 @@ def reportar():
     user = data.get('user')
     if user in usuarios_db:
         db_user = usuarios_db[user]['datos']
-        if data.get('estado') == "HECHO":
-            # Guardar en el log global antes de limpiar la tarea
-            nueva_entrada = {
-                "usuario": user,
-                "tarea": db_user['tarea_actual'],
-                "fecha": datetime.now().strftime("%H:%M - %d/%m")
-            }
-            if "log_global" not in usuarios_db: usuarios_db["log_global"] = []
-            usuarios_db["log_global"].append(nueva_entrada)
-            
-            # Limitar log a los últimos 50 registros para no saturar
-            if len(usuarios_db["log_global"]) > 50: usuarios_db["log_global"].pop(0)
-
-            db_user['rendimiento']['exitos'] += 1
-            db_user['tarea_actual'] = "Misión Cumplida"
-        else:
-            db_user['rendimiento']['retrasos'] += 1
-            
+        es_retraso = data.get('estado') == "RETRASO"
+        
+        nueva_entrada = {
+            "usuario": user,
+            "tarea": db_user['tarea_actual'],
+            "fecha": datetime.now().strftime("%H:%M - %d/%m"),
+            "enviado_por": db_user.get('enviado_por', 'Sistema'),
+            "retraso": es_retraso
+        }
+        
+        if "log_global" not in usuarios_db: usuarios_db["log_global"] = []
+        usuarios_db["log_global"].append(nueva_entrada)
+        
+        if es_retraso: db_user['rendimiento']['retrasos'] += 1
+        else: db_user['rendimiento']['exitos'] += 1
+        
+        db_user['tarea_actual'] = "Misión Finalizada" if not es_retraso else "Finalizada con Retraso"
         guardar_db(usuarios_db)
         return jsonify({"ok": True})
     return jsonify({"ok": False}), 400
-
-# [Las demás rutas se mantienen igual]
-@app.route('/eliminar_operador/<nombre>')
-def eliminar_operador(nombre):
-    if session.get('user') == 'operador1':
-        if nombre in usuarios_db and nombre != 'operador1':
-            del usuarios_db[nombre]
-            guardar_db(usuarios_db)
-    return redirect(url_for('home'))
 
 @app.route('/enviar_tarea_web', methods=['POST'])
 def enviar_tarea_web():
@@ -282,6 +272,7 @@ def enviar_tarea_web():
         d['id_envio'] += 1
         d['tarea_actual'] = request.form.get('tarea')
         d['tiempo_actual'] = int(request.form.get('mins'))
+        d['enviado_por'] = session['user'] # Guardamos quién mandó la tarea
         d['ultimo_msj'] = random.choice(FRASES_LUMINA)
         d['rendimiento']['total'] += 1
         guardar_db(usuarios_db)
@@ -292,15 +283,15 @@ def get_data():
     user = request.args.get('user')
     if user in usuarios_db:
         d = usuarios_db[user]['datos']
-        return jsonify({"tarea": d['tarea_actual'], "tiempo": d['tiempo_actual'], "id": d['id_envio']})
+        return jsonify({"tarea": d['tarea_actual'], "tiempo": d['tiempo_actual'], "id": d['id_envio'], "remitente": d['enviado_por']})
     return jsonify({"error": "No user"}), 404
 
 @app.route('/verificar_cambios')
 def verificar_cambios():
     if 'user' not in session: return jsonify({"update": False})
-    # Incluimos el conteo de logs en la verificación para que refresque cuando alguien termina algo
     num_logs = len(usuarios_db.get('log_global', []))
-    estado_equipo = f"logs:{num_logs}-" + "-".join([f"{u}:{usuarios_db[u]['datos']['rendimiento']['exitos']}:{usuarios_db[u]['datos']['tarea_actual']}" for u in usuarios_db if u != 'log_global'])
+    # Detectamos cambios en éxitos, retrasos y tareas actuales de todo el equipo
+    estado_equipo = f"logs:{num_logs}-" + "-".join([f"{u}:{usuarios_db[u]['datos']['rendimiento']['exitos']}:{usuarios_db[u]['datos']['rendimiento']['retrasos']}" for u in usuarios_db if u != 'log_global'])
     if session.get('last_state') != estado_equipo:
         session['last_state'] = estado_equipo
         return jsonify({"update": True})
