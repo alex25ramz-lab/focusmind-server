@@ -66,7 +66,6 @@ def login():
             else:
                 error = "Código de acceso incorrecto."
         else:
-            # Registro automático si no existe
             db[usuario] = {"password": "", "datos": inicializar_perfil(usuario)}
             guardar_db(db)
             session["usuario"] = usuario
@@ -149,7 +148,7 @@ def eliminar_usuario(nombre):
         return redirect(url_for("login"))
     
     db = cargar_db()
-    if nombre in db and nombre != "operador1":  # Proteger la cuenta maestra de borrados accidentales
+    if nombre in db and nombre != "operador1":
         del db[nombre]
         guardar_db(db)
     return redirect(url_for("panel"))
@@ -330,7 +329,6 @@ HTML_PANEL = """
     .toast.show { opacity: 1; transform: translateY(0) scale(1); }
     .toast-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--neon); animation: pulse 1s infinite; flex-shrink: 0; }
     
-    /* MONITOR DE OPERADORES GRIDS Y DISEÑO */
     .op-row { display: grid; grid-template-columns: 40px 1fr auto auto; gap: 14px; align-items: center; padding: 13px 0; border-bottom: 0.5px solid var(--border); position: relative; transition: background 0.4s; border-radius: 8px; }
     .op-row:last-child { border-bottom: none; }
     .op-row.targeted { background: rgba(0,229,160,0.04); }
@@ -355,15 +353,12 @@ HTML_PANEL = """
     .stat-ok  { color: var(--neon); }
     .stat-bad { color: var(--red); }
     
-    /* BOTÓN Y FUNCIÓN DE ELIMINAR INTERFAZ */
     .del-btn { font-size: 12px; color: rgba(255,79,79,0.45); text-decoration: none; display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 6px; border: 0.5px solid rgba(255,79,79,0.15); transition: all 0.25s; }
     .del-btn:hover { color: var(--red); background: rgba(255,79,79,0.08); border-color: rgba(255,79,79,0.4); }
     
-    /* PANEL O BOTÓN DE AGREGAR PERSONAS */
     .add-link { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; color: var(--neon); text-decoration: none; opacity: 0.65; margin-top: 14px; font-family: 'Share Tech Mono', monospace; letter-spacing: 1px; cursor: pointer; text-transform: uppercase; border: 0.5px dashed var(--neon-border); padding: 5px 12px; border-radius: 6px; }
     .add-link:hover { opacity: 1; background: rgba(0,229,160,0.03); }
     
-    /* MINI MODAL EN LÍNEA DE REGISTRO NUEVO */
     .add-box-wrap { display: none; margin-top: 12px; padding: 14px; background: #080909; border: 0.5px solid var(--neon-border); border-radius: 10px; animation: fadeSlide 0.25s ease both; }
     .add-box-form { display: flex; gap: 8px; }
     
@@ -382,7 +377,6 @@ HTML_PANEL = """
     .empty-log  { color: var(--muted); font-size: 11px; text-align: center; padding: 28px 0; font-family: 'Share Tech Mono', monospace; }
     .particle { position: fixed; border-radius: 50%; pointer-events: none; z-index: 9999; animation: particleFly var(--dur) ease-out var(--delay) both; }
     
-    /* OVERLAY CUÁNTICO */
     .launch-overlay { position: fixed; inset: 0; z-index: 8000; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; transition: opacity 0.25s; }
     .launch-overlay.active { opacity: 1; }
     .launch-box { background: #080d0b; border: 0.5px solid var(--neon-border); border-radius: 16px; padding: 28px 40px; text-align: center; font-family: 'Share Tech Mono', monospace; transform: scale(0.88); transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1); }
@@ -540,7 +534,7 @@ HTML_PANEL = """
         <div class="log-entry">
           <span class="log-user">{{ log.usuario }}</span>
           <div>
-            <div class="log-name">{{ log.tarea }}</div>
+            <div class="log-name">${log.tarea}</div>
             <div class="log-via">Por: {{ log.enviado_por }}</div>
             {% if log.retraso %}<span class="tag-delay">! Retraso</span>{% else %}<span class="tag-ok">Completada</span>{% endif %}
           </div>
