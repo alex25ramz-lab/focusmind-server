@@ -39,6 +39,8 @@ def guardar_db(db):
     with open(DB_FILE, "w") as f:
         json.dump(db, f, indent=4)
 
+usuarios_db = cargar_db()
+
 FRASES_LUMINA = [
     "Objetivo detectado. Optimizando frecuencia de enfoque.",
     "Lumina en línea. Iniciando secuencia de productividad.",
@@ -66,6 +68,7 @@ def login():
             else:
                 error = "Código de acceso incorrecto."
         else:
+            # Registro automático si no existe
             db[usuario] = {"password": "", "datos": inicializar_perfil(usuario)}
             guardar_db(db)
             session["usuario"] = usuario
@@ -127,7 +130,7 @@ def enviar_tarea_web():
         
     return jsonify({"success": False, "error": "Destinatario no encontrado"}), 400
 
-# ── RUTA: AÑADIR NUEVO OPERADOR ──
+# ── RUTA backend: REGISTRAR NUEVO OPERADOR ──
 @app.route("/agregar_usuario", methods=["POST"])
 def agregar_usuario():
     if "usuario" not in session:
@@ -141,13 +144,14 @@ def agregar_usuario():
             guardar_db(db)
     return redirect(url_for("panel"))
 
-# ── RUTA: ELIMINAR OPERADOR ──
+# ── RUTA backend: ELIMINAR OPERADOR ──
 @app.route("/eliminar_usuario/<nombre>")
 def eliminar_usuario(nombre):
     if "usuario" not in session:
         return redirect(url_for("login"))
     
     db = cargar_db()
+    # Evita que se elimine la cuenta maestra por seguridad básica
     if nombre in db and nombre != "operador1":
         del db[nombre]
         guardar_db(db)
@@ -353,15 +357,16 @@ HTML_PANEL = """
     .stat-ok  { color: var(--neon); }
     .stat-bad { color: var(--red); }
     
+    /* Botón eliminar */
     .del-btn { font-size: 12px; color: rgba(255,79,79,0.45); text-decoration: none; display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 6px; border: 0.5px solid rgba(255,79,79,0.15); transition: all 0.25s; }
     .del-btn:hover { color: var(--red); background: rgba(255,79,79,0.08); border-color: rgba(255,79,79,0.4); }
     
+    /* Enlace y caja para registrar operadores */
     .add-link { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; color: var(--neon); text-decoration: none; opacity: 0.65; margin-top: 14px; font-family: 'Share Tech Mono', monospace; letter-spacing: 1px; cursor: pointer; text-transform: uppercase; border: 0.5px dashed var(--neon-border); padding: 5px 12px; border-radius: 6px; }
     .add-link:hover { opacity: 1; background: rgba(0,229,160,0.03); }
-    
     .add-box-wrap { display: none; margin-top: 12px; padding: 14px; background: #080909; border: 0.5px solid var(--neon-border); border-radius: 10px; animation: fadeSlide 0.25s ease both; }
     .add-box-form { display: flex; gap: 8px; }
-    
+
     .log-scroll { max-height: 260px; overflow-y: auto; }
     .log-scroll::-webkit-scrollbar { width: 3px; }
     .log-scroll::-webkit-scrollbar-thumb { background: var(--neon-border); border-radius: 3px; }
@@ -376,7 +381,6 @@ HTML_PANEL = """
     .log-time   { font-size: 9px; color: #555; text-align: right; white-space: nowrap; font-family: 'Share Tech Mono', monospace; }
     .empty-log  { color: var(--muted); font-size: 11px; text-align: center; padding: 28px 0; font-family: 'Share Tech Mono', monospace; }
     .particle { position: fixed; border-radius: 50%; pointer-events: none; z-index: 9999; animation: particleFly var(--dur) ease-out var(--delay) both; }
-    
     .launch-overlay { position: fixed; inset: 0; z-index: 8000; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; transition: opacity 0.25s; }
     .launch-overlay.active { opacity: 1; }
     .launch-box { background: #080d0b; border: 0.5px solid var(--neon-border); border-radius: 16px; padding: 28px 40px; text-align: center; font-family: 'Share Tech Mono', monospace; transform: scale(0.88); transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1); }
@@ -393,7 +397,6 @@ HTML_PANEL = """
     .ring:nth-child(2) { width: 55px;  height: 55px; }
     .ring:nth-child(3) { width: 80px;  height: 80px; }
     .launch-icon-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 26px; color: var(--neon); }
-    
     .flash-bg { animation: bgFlash 0.4s ease-out both; }
     @keyframes pulse       { 0%,100%{opacity:1} 50%{opacity:0.25} }
     @keyframes blink       { 0%,100%{opacity:1} 50%{opacity:0} }
@@ -498,7 +501,6 @@ HTML_PANEL = """
         </div>
         <div class="op-via">vía: {{ op_info.datos.enviado_por }}</div>
       </div>
-      
       <div class="op-stats">
         <span class="stat-chip stat-ok"><i class="ti ti-check"></i>{{ op_info.datos.rendimiento.exitos }}</span>
         <span class="stat-chip stat-bad"><i class="ti ti-clock"></i>{{ op_info.datos.rendimiento.retrasos }}</span>
@@ -725,4 +727,3 @@ function interceptDeploy(e) {
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
-    
