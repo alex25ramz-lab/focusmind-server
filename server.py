@@ -39,8 +39,6 @@ def guardar_db(db):
     with open(DB_FILE, "w") as f:
         json.dump(db, f, indent=4)
 
-usuarios_db = cargar_db()
-
 FRASES_LUMINA = [
     "Objetivo detectado. Optimizando frecuencia de enfoque.",
     "Lumina en línea. Iniciando secuencia de productividad.",
@@ -129,6 +127,32 @@ def enviar_tarea_web():
         return jsonify({"success": True, "frase": db[destinatario]["datos"]["ultimo_msj"]})
         
     return jsonify({"success": False, "error": "Destinatario no encontrado"}), 400
+
+# ── RUTA: AÑADIR NUEVO OPERADOR ──
+@app.route("/agregar_usuario", methods=["POST"])
+def agregar_usuario():
+    if "usuario" not in session:
+        return redirect(url_for("login"))
+    
+    nuevo_op = request.form.get("nuevo_usuario", "").strip()
+    if nuevo_op:
+        db = cargar_db()
+        if nuevo_op not in db and nuevo_op != "log_global":
+            db[nuevo_op] = {"password": "", "datos": inicializar_perfil(nuevo_op)}
+            guardar_db(db)
+    return redirect(url_for("panel"))
+
+# ── RUTA: ELIMINAR OPERADOR ──
+@app.route("/eliminar_usuario/<nombre>")
+def eliminar_usuario(nombre):
+    if "usuario" not in session:
+        return redirect(url_for("login"))
+    
+    db = cargar_db()
+    if nombre in db and nombre != "operador1":  # Proteger la cuenta maestra de borrados accidentales
+        del db[nombre]
+        guardar_db(db)
+    return redirect(url_for("panel"))
 
 @app.route("/logout")
 def logout():
@@ -305,6 +329,8 @@ HTML_PANEL = """
     }
     .toast.show { opacity: 1; transform: translateY(0) scale(1); }
     .toast-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--neon); animation: pulse 1s infinite; flex-shrink: 0; }
+    
+    /* MONITOR DE OPERADORES GRIDS Y DISEÑO */
     .op-row { display: grid; grid-template-columns: 40px 1fr auto auto; gap: 14px; align-items: center; padding: 13px 0; border-bottom: 0.5px solid var(--border); position: relative; transition: background 0.4s; border-radius: 8px; }
     .op-row:last-child { border-bottom: none; }
     .op-row.targeted { background: rgba(0,229,160,0.04); }
@@ -324,14 +350,23 @@ HTML_PANEL = """
     .sdot-active { background: var(--neon); box-shadow: 0 0 5px rgba(0,229,160,0.6); }
     .sdot-idle   { background: #333; }
     .sdot-delay  { background: var(--red); }
-    .op-stats { display: flex; gap: 10px; }
+    .op-stats { display: flex; gap: 10px; margin-right: 4px; }
     .stat-chip { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 3px; font-family: 'Share Tech Mono', monospace; }
     .stat-ok  { color: var(--neon); }
     .stat-bad { color: var(--red); }
-    .del-btn { font-size: 9px; color: var(--red); border: 0.5px solid rgba(255,79,79,0.25); padding: 4px 8px; border-radius: 5px; text-decoration: none; font-family: 'Share Tech Mono', monospace; transition: background 0.2s; }
-    .del-btn:hover { background: rgba(255,79,79,0.08); }
-    .add-link { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--neon); text-decoration: none; opacity: 0.7; margin-top: 14px; font-family: 'Share Tech Mono', monospace; }
-    .add-link:hover { opacity: 1; }
+    
+    /* BOTÓN Y FUNCIÓN DE ELIMINAR INTERFAZ */
+    .del-btn { font-size: 12px; color: rgba(255,79,79,0.45); text-decoration: none; display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 6px; border: 0.5px solid rgba(255,79,79,0.15); transition: all 0.25s; }
+    .del-btn:hover { color: var(--red); background: rgba(255,79,79,0.08); border-color: rgba(255,79,79,0.4); }
+    
+    /* PANEL O BOTÓN DE AGREGAR PERSONAS */
+    .add-link { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; color: var(--neon); text-decoration: none; opacity: 0.65; margin-top: 14px; font-family: 'Share Tech Mono', monospace; letter-spacing: 1px; cursor: pointer; text-transform: uppercase; border: 0.5px dashed var(--neon-border); padding: 5px 12px; border-radius: 6px; }
+    .add-link:hover { opacity: 1; background: rgba(0,229,160,0.03); }
+    
+    /* MINI MODAL EN LÍNEA DE REGISTRO NUEVO */
+    .add-box-wrap { display: none; margin-top: 12px; padding: 14px; background: #080909; border: 0.5px solid var(--neon-border); border-radius: 10px; animation: fadeSlide 0.25s ease both; }
+    .add-box-form { display: flex; gap: 8px; }
+    
     .log-scroll { max-height: 260px; overflow-y: auto; }
     .log-scroll::-webkit-scrollbar { width: 3px; }
     .log-scroll::-webkit-scrollbar-thumb { background: var(--neon-border); border-radius: 3px; }
@@ -346,6 +381,8 @@ HTML_PANEL = """
     .log-time   { font-size: 9px; color: #555; text-align: right; white-space: nowrap; font-family: 'Share Tech Mono', monospace; }
     .empty-log  { color: var(--muted); font-size: 11px; text-align: center; padding: 28px 0; font-family: 'Share Tech Mono', monospace; }
     .particle { position: fixed; border-radius: 50%; pointer-events: none; z-index: 9999; animation: particleFly var(--dur) ease-out var(--delay) both; }
+    
+    /* OVERLAY CUÁNTICO */
     .launch-overlay { position: fixed; inset: 0; z-index: 8000; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; transition: opacity 0.25s; }
     .launch-overlay.active { opacity: 1; }
     .launch-box { background: #080d0b; border: 0.5px solid var(--neon-border); border-radius: 16px; padding: 28px 40px; text-align: center; font-family: 'Share Tech Mono', monospace; transform: scale(0.88); transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1); }
@@ -362,6 +399,7 @@ HTML_PANEL = """
     .ring:nth-child(2) { width: 55px;  height: 55px; }
     .ring:nth-child(3) { width: 80px;  height: 80px; }
     .launch-icon-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 26px; color: var(--neon); }
+    
     .flash-bg { animation: bgFlash 0.4s ease-out both; }
     @keyframes pulse       { 0%,100%{opacity:1} 50%{opacity:0.25} }
     @keyframes blink       { 0%,100%{opacity:1} 50%{opacity:0} }
@@ -466,12 +504,32 @@ HTML_PANEL = """
         </div>
         <div class="op-via">vía: {{ op_info.datos.enviado_por }}</div>
       </div>
+      
       <div class="op-stats">
         <span class="stat-chip stat-ok"><i class="ti ti-check"></i>{{ op_info.datos.rendimiento.exitos }}</span>
         <span class="stat-chip stat-bad"><i class="ti ti-clock"></i>{{ op_info.datos.rendimiento.retrasos }}</span>
       </div>
+      
+      <div>
+        {% if op_name != 'operador1' %}
+          <a href="/eliminar_usuario/{{ op_name }}" class="del-btn" title="Dar de baja operador">
+            <i class="ti ti-trash"></i>
+          </a>
+        {% else %}
+          <div style="width: 26px;"></div>
+        {% endif %}
+      </div>
     </div>
     {% endfor %}
+
+    <div class="add-link" onclick="toggleAddBox()"><i class="ti ti-user-plus"></i> Registrar nuevo operador</div>
+    
+    <div class="add-box-wrap" id="add-box">
+      <form class="add-box-form" action="/agregar_usuario" method="POST">
+        <input type="text" name="nuevo_usuario" placeholder="ID del nuevo operador (Ej: Operador 2)" required>
+        <button type="submit" class="deploy-btn" style="width: auto; padding: 0 16px; margin: 0;"><i class="ti ti-plus"></i></button>
+      </form>
+    </div>
   </div>
 
   <div class="card fade-in">
@@ -497,6 +555,11 @@ HTML_PANEL = """
 </div>
 
 <script>
+function toggleAddBox() {
+  const box = document.getElementById('add-box');
+  box.style.display = (box.style.display === 'block') ? 'none' : 'block';
+}
+
 function spawnParticles(fromEl, toEl, count = 18) {
   const fR = fromEl.getBoundingClientRect();
   const tR = toEl.getBoundingClientRect();
