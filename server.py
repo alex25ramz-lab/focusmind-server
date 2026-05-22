@@ -39,6 +39,8 @@ def guardar_db(db):
     with open(DB_FILE, "w") as f:
         json.dump(db, f, indent=4)
 
+usuarios_db = cargar_db()
+
 FRASES_LUMINA = [
     "Objetivo detectado. Optimizando frecuencia de enfoque.",
     "Lumina en línea. Iniciando secuencia de productividad.",
@@ -66,6 +68,7 @@ def login():
             else:
                 error = "Código de acceso incorrecto."
         else:
+            # Registro automático si no existe
             db[usuario] = {"password": "", "datos": inicializar_perfil(usuario)}
             guardar_db(db)
             session["usuario"] = usuario
@@ -126,48 +129,6 @@ def enviar_tarea_web():
         return jsonify({"success": True, "frase": db[destinatario]["datos"]["ultimo_msj"]})
         
     return jsonify({"success": False, "error": "Destinatario no encontrado"}), 400
-
-# ── RUTA AJAX: REGISTRAR NUEVO OPERADOR SIN RECARGAR ──
-@app.route("/agregar_usuario_ajax", methods=["POST"])
-def agregar_usuario_ajax():
-    if "usuario" not in session:
-        return jsonify({"success": False, "error": "Sesión no válida"}), 403
-    
-    nuevo_op = request.form.get("nuevo_usuario", "").strip()
-    if not nuevo_op or nuevo_op == "log_global":
-        return jsonify({"success": False, "error": "Identificador inválido"}), 400
-        
-    db = cargar_db()
-    if nuevo_op in db:
-        return jsonify({"success": False, "error": "El operador ya existe en la red"}), 400
-        
-    db[nuevo_op] = {"password": "", "datos": inicializar_perfil(nuevo_op)}
-    guardar_db(db)
-    
-    frase_sistema = f"Frecuencia vinculada. {nuevo_op} añadido al monitor de escaneo."
-    return jsonify({
-        "success": True, 
-        "nombre": nuevo_op,
-        "iniciales": nuevo_op[:2].upper(),
-        "frase": frase_sistema
-    })
-
-# ── RUTA AJAX: ELIMINAR OPERADOR SIN RECARGAR ──
-@app.route("/eliminar_usuario_ajax/<nombre>", methods=["POST"])
-def eliminar_usuario_ajax(nombre):
-    if "usuario" not in session:
-        return jsonify({"success": False, "error": "Sesión no válida"}), 403
-    
-    if nombre == "operador1":
-        return jsonify({"success": False, "error": "Protección de sistema: Núcleo maestro no modificable"}), 400
-        
-    db = cargar_db()
-    if nombre in db:
-        del db[nombre]
-        guardar_db(db)
-        return jsonify({"success": True, "frase": f"Enlace interrumpido. {nombre} ha sido desconectado."})
-        
-    return jsonify({"success": False, "error": "Operador no localizado"}), 404
 
 @app.route("/logout")
 def logout():
@@ -344,8 +305,7 @@ HTML_PANEL = """
     }
     .toast.show { opacity: 1; transform: translateY(0) scale(1); }
     .toast-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--neon); animation: pulse 1s infinite; flex-shrink: 0; }
-    
-    .op-row { display: grid; grid-template-columns: 40px 1fr auto auto; gap: 14px; align-items: center; padding: 13px 0; border-bottom: 0.5px solid var(--border); position: relative; transition: background 0.4s, opacity 0.4s, transform 0.4s; border-radius: 8px; }
+    .op-row { display: grid; grid-template-columns: 40px 1fr auto auto; gap: 14px; align-items: center; padding: 13px 0; border-bottom: 0.5px solid var(--border); position: relative; transition: background 0.4s; border-radius: 8px; }
     .op-row:last-child { border-bottom: none; }
     .op-row.targeted { background: rgba(0,229,160,0.04); }
     .op-row .row-ripple { position: absolute; left: 0; top: 0; right: 0; bottom: 0; border-radius: 8px; pointer-events: none; border: 1.5px solid var(--neon); opacity: 0; }
@@ -359,24 +319,19 @@ HTML_PANEL = """
     .av-amber { background: rgba(245,166,35,0.1); color: var(--amber); border: 0.5px solid rgba(245,166,35,0.25); }
     .op-name { font-size: 13px; color: #eee; font-weight: 500; }
     .op-task { font-size: 10px; color: var(--muted); margin-top: 3px; display: flex; align-items: center; gap: 5px; font-family: 'Share Tech Mono', monospace; }
-    .op-via { font-size: 9px; color: #333; font-family: 'Share Tech Mono', monospace; }
+    .op-via   { font-size: 9px; color: #333; font-family: 'Share Tech Mono', monospace; }
     .sdot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
     .sdot-active { background: var(--neon); box-shadow: 0 0 5px rgba(0,229,160,0.6); }
     .sdot-idle   { background: #333; }
     .sdot-delay  { background: var(--red); }
-    .op-stats { display: flex; gap: 10px; margin-right: 4px; }
+    .op-stats { display: flex; gap: 10px; }
     .stat-chip { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 3px; font-family: 'Share Tech Mono', monospace; }
     .stat-ok  { color: var(--neon); }
     .stat-bad { color: var(--red); }
-    
-    .del-btn { font-size: 12px; color: rgba(255,79,79,0.45); text-decoration: none; display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 6px; border: 0.5px solid rgba(255,79,79,0.15); transition: all 0.25s; cursor: pointer; }
-    .del-btn:hover { color: var(--red); background: rgba(255,79,79,0.08); border-color: rgba(255,79,79,0.4); }
-    
-    .add-link { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; color: var(--neon); text-decoration: none; opacity: 0.65; margin-top: 14px; font-family: 'Share Tech Mono', monospace; letter-spacing: 1px; cursor: pointer; text-transform: uppercase; border: 0.5px dashed var(--neon-border); padding: 5px 12px; border-radius: 6px; transition: all 0.2s; }
-    .add-link:hover { opacity: 1; background: rgba(0,229,160,0.03); }
-    .add-box-wrap { display: none; margin-top: 12px; padding: 14px; background: #080909; border: 0.5px solid var(--neon-border); border-radius: 10px; animation: fadeSlide 0.25s ease both; }
-    .add-box-form { display: flex; gap: 8px; }
-
+    .del-btn { font-size: 9px; color: var(--red); border: 0.5px solid rgba(255,79,79,0.25); padding: 4px 8px; border-radius: 5px; text-decoration: none; font-family: 'Share Tech Mono', monospace; transition: background 0.2s; }
+    .del-btn:hover { background: rgba(255,79,79,0.08); }
+    .add-link { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--neon); text-decoration: none; opacity: 0.7; margin-top: 14px; font-family: 'Share Tech Mono', monospace; }
+    .add-link:hover { opacity: 1; }
     .log-scroll { max-height: 260px; overflow-y: auto; }
     .log-scroll::-webkit-scrollbar { width: 3px; }
     .log-scroll::-webkit-scrollbar-thumb { background: var(--neon-border); border-radius: 3px; }
@@ -490,53 +445,33 @@ HTML_PANEL = """
 
   <div class="card fade-in" id="monitor-card">
     <div class="card-label"><i class="ti ti-radar"></i> Monitor de equipo</div>
-    <div id="operator-rows-container">
-      {% set avatares = ['av-neon','av-blue','av-amber'] %}
-      {% for op_name, op_info in equipo.items() if op_name != 'log_global' %}
-      {% set loop_idx = loop.index0 %}
-      <div class="op-row" id="row-{{ op_name }}" data-user="{{ op_name }}">
-        <div class="row-ripple"></div>
-        <div class="scan-line" id="scan-{{ op_name }}"></div>
-        <div class="op-avatar {{ avatares[loop_idx % 3] }}" id="av-{{ op_name }}">{{ op_name[:2].upper() }}</div>
-        <div>
-          <div class="op-name">{{ op_name }}</div>
-          <div class="op-task" id="task-label-{{ op_name }}">
-            {% if op_info.datos.tarea_actual == 'Esperando mando...' %}
-              <span class="sdot sdot-idle"></span>
-            {% elif 'Retraso' in op_info.datos.tarea_actual %}
-              <span class="sdot sdot-delay"></span>
-            {% else %}
-              <span class="sdot sdot-active"></span>
-            {% endif %}
-            <span id="task-txt-{{ op_name }}">{{ op_info.datos.tarea_actual }}</span>
-          </div>
-          <div class="op-via">vía: {{ op_info.datos.enviado_por }}</div>
-        </div>
-        <div class="op-stats">
-          <span class="stat-chip stat-ok"><i class="ti ti-check"></i>{{ op_info.datos.rendimiento.exitos }}</span>
-          <span class="stat-chip stat-bad"><i class="ti ti-clock"></i>{{ op_info.datos.rendimiento.retrasos }}</span>
-        </div>
-        <div>
-          {% if op_name != 'operador1' %}
-            <div onclick="eliminarOperadorAjax('{{ op_name }}')" class="del-btn" title="Dar de baja operador">
-              <i class="ti ti-trash"></i>
-            </div>
+    {% set avatares = ['av-neon','av-blue','av-amber'] %}
+    {% for op_name, op_info in equipo.items() if op_name != 'log_global' %}
+    {% set loop_idx = loop.index0 %}
+    <div class="op-row" id="row-{{ op_name }}" data-user="{{ op_name }}">
+      <div class="row-ripple"></div>
+      <div class="scan-line" id="scan-{{ op_name }}"></div>
+      <div class="op-avatar {{ avatares[loop_idx % 3] }}" id="av-{{ op_name }}">{{ op_name[:2].upper() }}</div>
+      <div>
+        <div class="op-name">{{ op_name }}</div>
+        <div class="op-task" id="task-label-{{ op_name }}">
+          {% if op_info.datos.tarea_actual == 'Esperando mando...' %}
+            <span class="sdot sdot-idle"></span>
+          {% elif 'Retraso' in op_info.datos.tarea_actual %}
+            <span class="sdot sdot-delay"></span>
           {% else %}
-            <div style="width: 26px;"></div>
+            <span class="sdot sdot-active"></span>
           {% endif %}
+          <span id="task-txt-{{ op_name }}">{{ op_info.datos.tarea_actual }}</span>
         </div>
+        <div class="op-via">vía: {{ op_info.datos.enviado_por }}</div>
       </div>
-      {% endfor %}
+      <div class="op-stats">
+        <span class="stat-chip stat-ok"><i class="ti ti-check"></i>{{ op_info.datos.rendimiento.exitos }}</span>
+        <span class="stat-chip stat-bad"><i class="ti ti-clock"></i>{{ op_info.datos.rendimiento.retrasos }}</span>
+      </div>
     </div>
-
-    <div class="add-link" onclick="toggleAddBox()"><i class="ti ti-user-plus"></i> Registrar nuevo operador</div>
-    
-    <div class="add-box-wrap" id="add-box">
-      <form class="add-box-form" id="add-op-form" onsubmit="agregarOperadorAjax(e = event)">
-        <input type="text" name="nuevo_usuario" id="nuevo-usuario-input" placeholder="ID del nuevo operador (Ej: Operador 2)" required>
-        <button type="submit" class="deploy-btn" style="width: auto; padding: 0 16px; margin: 0;"><i class="ti ti-plus"></i></button>
-      </form>
-    </div>
+    {% endfor %}
   </div>
 
   <div class="card fade-in">
@@ -562,108 +497,6 @@ HTML_PANEL = """
 </div>
 
 <script>
-function toggleAddBox() {
-  const box = document.getElementById('add-box');
-  box.style.display = (box.style.display === 'block') ? 'none' : 'block';
-  if(box.style.display === 'block') document.getElementById('nuevo-usuario-input').focus();
-}
-
-// ── REGISTRO AJAX DINÁMICO ──
-function agregarOperadorAjax(e) {
-  e.preventDefault();
-  const input = document.getElementById('nuevo-usuario-input');
-  const nombre = input.value.trim();
-  if(!nombre) return;
-
-  const formData = new FormData();
-  formData.append('nuevo_usuario', nombre);
-
-  fetch('/agregar_usuario_ajax', { method: 'POST', body: formData })
-  .then(res => res.json())
-  .then(data => {
-    if(data.success) {
-      document.getElementById('console-msg').textContent = data.frase;
-      input.value = '';
-      toggleAddBox();
-
-      // 1. Inyectar dinámicamente en el Monitor de Equipo
-      const container = document.getElementById('operator-rows-container');
-      const totalRows = container.querySelectorAll('.op-row').length;
-      const avClasses = ['av-neon', 'av-blue', 'av-amber'];
-      const currentAv = avClasses[totalRows % 3];
-
-      const newRow = document.createElement('div');
-      newRow.className = 'op-row fade-in';
-      newRow.id = `row-${data.nombre}`;
-      newRow.setAttribute('data-user', data.nombre);
-      newRow.innerHTML = `
-        <div class="row-ripple"></div>
-        <div class="scan-line" id="scan-${data.nombre}"></div>
-        <div class="op-avatar ${currentAv}" id="av-${data.nombre}">${data.iniciales}</div>
-        <div>
-          <div class="op-name">${data.nombre}</div>
-          <div class="op-task" id="task-label-${data.nombre}">
-            <span class="sdot sdot-idle"></span>
-            <span id="task-txt-${data.nombre}">Esperando mando...</span>
-          </div>
-          <div class="op-via">vía: Sistema</div>
-        </div>
-        <div class="op-stats">
-          <span class="stat-chip stat-ok"><i class="ti ti-check"></i>0</span>
-          <span class="stat-chip stat-bad"><i class="ti ti-clock"></i>0</span>
-        </div>
-        <div>
-          <div onclick="eliminarOperadorAjax('${data.nombre}')" class="del-btn" title="Dar de baja operador">
-            <i class="ti ti-trash"></i>
-          </div>
-        </div>
-      `;
-      container.appendChild(newRow);
-
-      // 2. Inyectar en el selector de asignación de misiones
-      const select = document.getElementById('dest-select');
-      const option = document.createElement('option');
-      option.value = data.nombre;
-      option.textContent = data.nombre;
-      select.appendChild(option);
-    } else {
-      document.getElementById('console-msg').textContent = `ERROR: ${data.error}`;
-    }
-  }).catch(() => {
-    document.getElementById('console-msg').textContent = "ERROR: Falla de red en enlace LUMINA.";
-  });
-}
-
-// ── BAJA AJAX DINÁMICA ──
-function eliminarOperadorAjax(nombre) {
-  if(!confirm(`¿Interrumpir frecuencia y dar de baja a ${nombre}?`)) return;
-
-  fetch(`/eliminar_usuario_ajax/${nombre}`, { method: 'POST' })
-  .then(res => res.json())
-  .then(data => {
-    if(data.success) {
-      document.getElementById('console-msg').textContent = data.frase;
-      
-      // Animación de salida antes de remover del DOM
-      const row = document.getElementById(`row-${nombre}`);
-      if(row) {
-        row.style.opacity = '0';
-        row.style.transform = 'translateX(-20px)';
-        setTimeout(() => row.remove(), 400);
-      }
-
-      // Remover del selector de misiones
-      const select = document.getElementById('dest-select');
-      const optionToRemove = select.querySelector(`option[value="${nombre}"]`);
-      if(optionToRemove) optionToRemove.remove();
-    } else {
-      document.getElementById('console-msg').textContent = `ERROR: ${data.error}`;
-    }
-  }).catch(() => {
-    document.getElementById('console-msg').textContent = "ERROR: No se pudo procesar la baja del operador.";
-  });
-}
-
 function spawnParticles(fromEl, toEl, count = 18) {
   const fR = fromEl.getBoundingClientRect();
   const tR = toEl.getBoundingClientRect();
