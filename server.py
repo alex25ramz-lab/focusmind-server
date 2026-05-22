@@ -534,7 +534,7 @@ HTML_PANEL = """
         <div class="log-entry">
           <span class="log-user">{{ log.usuario }}</span>
           <div>
-            <div class="log-name">${log.tarea}</div>
+            <div class="log-name">{{ log.tarea }}</div>
             <div class="log-via">Por: {{ log.enviado_por }}</div>
             {% if log.retraso %}<span class="tag-delay">! Retraso</span>{% else %}<span class="tag-ok">Completada</span>{% endif %}
           </div>
@@ -725,3 +725,4 @@ function interceptDeploy(e) {
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
+    
