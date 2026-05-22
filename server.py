@@ -68,7 +68,7 @@ def login():
             else:
                 error = "Código de acceso incorrecto."
         else:
-            # Registro automático simple si no existe
+            # Registro automático si no existe
             db[usuario] = {"password": "", "datos": inicializar_perfil(usuario)}
             guardar_db(db)
             session["usuario"] = usuario
@@ -135,9 +135,106 @@ def logout():
     session.pop("usuario", None)
     return redirect(url_for("login"))
 
-# ── PLANTILLAS HTML COMPLEMENTARIAS ──
-HTML_AUTH = """...""" # Mantiene exactamente tu diseño CSS y HTML original
 
+# ── INTERFAZ DE LOGIN (HTML_AUTH) ──
+HTML_AUTH = """
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"><title>LUMINA OS — Auth</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Syne:wght@300;400;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --neon: #00e5a0; --bg: #060708; --card: #0d0e10; --border: rgba(0,229,160,0.18); }
+    body {
+      background: var(--bg); color: #ddd;
+      font-family: 'Syne', sans-serif;
+      display: flex; align-items: center; justify-content: center; min-height: 100vh;
+    }
+    body::before {
+      content: ''; position: fixed; inset: 0;
+      background-image:
+        linear-gradient(rgba(0,229,160,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,229,160,0.03) 1px, transparent 1px);
+      background-size: 40px 40px; pointer-events: none;
+    }
+    .auth-wrap {
+      position: relative; width: 340px; background: var(--card);
+      border: 0.5px solid var(--border); border-radius: 18px; padding: 40px 36px 36px;
+    }
+    .auth-glow {
+      position: absolute; top: -60px; left: 50%; transform: translateX(-50%);
+      width: 180px; height: 180px;
+      background: radial-gradient(circle, rgba(0,229,160,0.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .logo-block { text-align: center; margin-bottom: 32px; }
+    .logo-block h1 { font-family: 'Share Tech Mono', monospace; font-size: 26px; letter-spacing: 10px; color: var(--neon); font-weight: 400; }
+    .logo-block .sub { font-size: 9px; color: rgba(0,229,160,0.4); letter-spacing: 4px; margin-top: 6px; text-transform: uppercase; }
+    .logo-block .status-line { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 10px; }
+    .dot-live { width: 6px; height: 6px; border-radius: 50%; background: var(--neon); animation: pulse 1.8s infinite; }
+    label { display: block; font-size: 9px; color: rgba(0,229,160,0.55); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px; }
+    input {
+      width: 100%; padding: 11px 14px; background: #080909;
+      border: 0.5px solid rgba(255,255,255,0.08); color: #e8e8e8;
+      border-radius: 8px; font-family: 'Share Tech Mono', monospace; font-size: 13px;
+      outline: none; transition: border 0.25s;
+    }
+    input:focus { border-color: var(--border); }
+    .field { margin-bottom: 16px; }
+    .submit-btn {
+      width: 100%; padding: 12px; background: var(--neon); color: #051a10;
+      font-family: 'Syne', sans-serif; font-weight: 600; font-size: 11px;
+      letter-spacing: 3px; text-transform: uppercase; border: none; border-radius: 8px;
+      cursor: pointer; margin-top: 4px; transition: opacity 0.2s, transform 0.1s;
+    }
+    .submit-btn:hover { opacity: 0.85; }
+    .submit-btn:active { transform: scale(0.98); }
+    .error-msg {
+      background: rgba(255,60,60,0.08); border: 0.5px solid rgba(255,60,60,0.3);
+      color: #ff6b6b; font-size: 11px; text-align: center; padding: 10px;
+      border-radius: 6px; margin-top: 14px; font-family: 'Share Tech Mono', monospace;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.25} }
+  </style>
+</head>
+<body>
+  <div class="auth-wrap">
+    <div class="auth-glow"></div>
+    <div class="logo-block">
+      <h1>LUMINA OS</h1>
+      <div class="sub">Sistema de gestión de misiones</div>
+      <div class="status-line">
+        <span class="dot-live"></span>
+        <span style="font-size:9px;color:rgba(0,229,160,0.4);letter-spacing:2px;font-family:'Share Tech Mono',monospace;">ONLINE</span>
+      </div>
+    </div>
+    <form method="POST">
+      <div class="field">
+        <label>ID Operador / Nombre</label>
+        <input type="text" id="user_input" name="usuario" placeholder="Identificador" required autofocus oninput="checkUser()">
+      </div>
+      <div class="field" id="pass_field" style="display:none;">
+        <label>Código de acceso</label>
+        <input type="password" name="password" placeholder="••••••••">
+      </div>
+      <button type="submit" class="submit-btn">Iniciar sistema</button>
+    </form>
+    {% if error %}<div class="error-msg">{{ error }}</div>{% endif %}
+  </div>
+  <script>
+    function checkUser() {
+      const v = document.getElementById('user_input').value;
+      document.getElementById('pass_field').style.display = v.toLowerCase() === 'operador1' ? 'block' : 'none';
+    }
+  </script>
+</body>
+</html>
+"""
+
+
+# ── INTERFAZ DEL PANEL DE CONTROL (HTML_PANEL) ──
 HTML_PANEL = """
 <!DOCTYPE html>
 <html lang="es">
@@ -246,7 +343,7 @@ HTML_PANEL = """
     .tag-ok     { font-size: 8px; color: var(--neon); border: 0.5px solid var(--neon-border); padding: 2px 6px; border-radius: 3px; display: inline-block; margin-top: 4px; letter-spacing: 0.5px; font-family: 'Share Tech Mono', monospace; }
     .tag-delay  { font-size: 8px; color: var(--red); border: 0.5px solid rgba(255,79,79,0.35); padding: 2px 6px; border-radius: 3px; display: inline-block; margin-top: 4px; letter-spacing: 0.5px; font-family: 'Share Tech Mono', monospace; text-transform: uppercase; }
     .tag-deploy { font-size: 8px; color: #8fa8ff; border: 0.5px solid rgba(90,120,255,0.3); padding: 2px 6px; border-radius: 3px; display: inline-block; margin-top: 4px; letter-spacing: 0.5px; font-family: 'Share Tech Mono', monospace; }
-    .log-time   { font-size: 9px; color: #333; text-align: right; white-space: nowrap; font-family: 'Share Tech Mono', monospace; }
+    .log-time   { font-size: 9px; color: #555; text-align: right; white-space: nowrap; font-family: 'Share Tech Mono', monospace; }
     .empty-log  { color: var(--muted); font-size: 11px; text-align: center; padding: 28px 0; font-family: 'Share Tech Mono', monospace; }
     .particle { position: fixed; border-radius: 50%; pointer-events: none; z-index: 9999; animation: particleFly var(--dur) ease-out var(--delay) both; }
     .launch-overlay { position: fixed; inset: 0; z-index: 8000; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; transition: opacity 0.25s; }
@@ -521,7 +618,7 @@ function interceptDeploy(e) {
 
   btn.classList.add('sending');
   btnTxt.textContent = "TRANSMITIENDO...";
-  bar.style.width = "100..";
+  bar.style.width = "100%";
   bar.style.transition = "width 0.5s ease";
 
   const formData = new FormData(document.getElementById('deploy-form'));
@@ -547,7 +644,6 @@ function interceptDeploy(e) {
         }, 550);
       }
       
-      // Resetear botón
       setTimeout(() => {
         btn.classList.remove('sending');
         btn.classList.add('done');
