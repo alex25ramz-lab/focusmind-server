@@ -22,17 +22,23 @@ def inicializar_perfil(nombre):
 
 def cargar_db():
     cuentas_maestras = {
-        "operador1": {"password": "123", "datos": inicializar_perfil("Operador 1")}
+        "operador1": {"password": "123", "datos": inicializar_perfil("Operador 1")},
+        "log_global": []
     }
     if not os.path.exists(DB_FILE):
+        guardar_db(cuentas_maestras)
         return cuentas_maestras
     with open(DB_FILE, "r") as f:
         try:
             data = json.load(f)
-            if "operador1" not in data: data["operador1"] = cuentas_maestras["operador1"]
-            if "log_global" not in data: data["log_global"] = []
+            if "operador1" not in data: 
+                data["operador1"] = cuentas_maestras["operador1"]
+            if "log_global" not in data: 
+                data["log_global"] = []
             return data
         except: 
+            # Si el archivo está vacío o corrupto, lo sobreescribe con la estructura limpia
+            guardar_db(cuentas_maestras)
             return cuentas_maestras
 
 def guardar_db(db):
@@ -58,14 +64,19 @@ def login():
         usuario = request.form.get("usuario", "").strip()
         password = request.form.get("password", "").strip()
         
+        if not usuario:
+            error = "El identificador no puede estar vacío."
+            return render_template_string(HTML_AUTH, error=error)
+            
         db = cargar_db()
-        if usuario in db:
+        if usuario in db and usuario != "log_global":
             if db[usuario]["password"] == password:
                 session["usuario"] = usuario
                 return redirect(url_for("panel"))
             else:
                 error = "Código de acceso incorrecto."
         else:
+            # Registro e inserción automática segura con persistencia inmediata
             db[usuario] = {"password": "", "datos": inicializar_perfil(usuario)}
             guardar_db(db)
             session["usuario"] = usuario
@@ -81,6 +92,12 @@ def panel():
     
     db = cargar_db()
     usuario_actual = session["usuario"]
+    
+    # Validar que el usuario actual exista en la DB (por si se borró la DB manualmente)
+    if usuario_actual not in db:
+        db[usuario_actual] = {"password": "", "datos": inicializar_perfil(usuario_actual)}
+        guardar_db(db)
+        
     ultimo_msj = db[usuario_actual]["datos"].get("ultimo_msj", "Sistemas listos.")
     lista_usuarios = [k for k in db.keys() if k != "log_global"]
     log_global = db.get("log_global", [])
@@ -104,8 +121,11 @@ def enviar_tarea_web():
     mins = request.form.get("mins")
     tarea = request.form.get("tarea")
     
+    if not destinatario or not mins or not tarea:
+        return jsonify({"success": False, "error": "Datos incompletos"}), 400
+        
     db = cargar_db()
-    if destinatario in db:
+    if destinatario in db and destinatario != "log_global":
         db[destinatario]["datos"]["tarea_actual"] = tarea
         db[destinatario]["datos"]["tiempo_actual"] = int(mins)
         db[destinatario]["datos"]["enviado_por"] = session["usuario"]
@@ -135,7 +155,7 @@ def agregar_usuario_ajax():
     
     nuevo_op = request.form.get("nuevo_usuario", "").strip()
     if not nuevo_op or nuevo_op == "log_global":
-        return jsonify({"success": False, "error": "ID inválido"}), 400
+        return jsonify({"success": False, "error": "ID de operador inválido"}), 400
         
     db = cargar_db()
     if nuevo_op in db:
@@ -268,7 +288,6 @@ HTML_PANEL = """
     .deploy-btn { width: 100%; padding: 13px; background: var(--neon); color: #041a0e; font-family: 'Syne', sans-serif; font-weight: 600; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; position: relative; }
     .btn-bar { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--neon); width: 0%; box-shadow: 0 0 8px rgba(0,229,160,0.6); }
     
-    /* Monitor & Animaciones */
     .op-row { display: grid; grid-template-columns: 40px 1fr auto auto; gap: 14px; align-items: center; padding: 13px 0; border-bottom: 0.5px solid var(--border); position: relative; transition: all 0.4s ease; border-radius: 8px; }
     .op-row.targeted { background: rgba(0,229,160,0.04); }
     .op-row .row-ripple { position: absolute; left: 0; top: 0; right: 0; bottom: 0; border-radius: 8px; pointer-events: none; border: 1.5px solid var(--neon); opacity: 0; }
@@ -290,7 +309,6 @@ HTML_PANEL = """
     .stat-ok { color: var(--neon); }
     .stat-bad { color: var(--red); }
     
-    /* Botones de Gestión Interna */
     .del-btn { font-size: 12px; color: rgba(255,79,79,0.5); cursor: pointer; border: 0.5px solid rgba(255,79,79,0.2); padding: 5px 8px; border-radius: 6px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
     .del-btn:hover { color: var(--red); background: rgba(255,79,79,0.1); border-color: var(--red); }
     .add-link { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--neon); opacity: 0.7; margin-top: 14px; font-family: 'Share Tech Mono', monospace; cursor: pointer; border: 0.5px dashed var(--neon-border); padding: 6px 12px; border-radius: 6px; }
@@ -453,7 +471,6 @@ function toggleAddBox() {
   if(box.style.display === 'block') document.getElementById('nuevo-usuario-input').focus();
 }
 
-// ── REGISTRO AJAX OPERADOR ──
 function agregarOperadorAjax(e) {
   e.preventDefault();
   const input = document.getElementById('nuevo-usuario-input');
@@ -511,7 +528,6 @@ function agregarOperadorAjax(e) {
   });
 }
 
-// ── BAJA AJAX OPERADOR ──
 function eliminarOperadorAjax(nombre) {
   if(!confirm(`¿Desconectar frecuencia de ${nombre}?`)) return;
 
@@ -534,7 +550,6 @@ function eliminarOperadorAjax(nombre) {
   });
 }
 
-// ── EFECTOS VISUALES Y DESPLIEGUE ──
 function spawnParticles(fromEl, toEl) {
   const fR = fromEl.getBoundingClientRect(); const tR = toEl.getBoundingClientRect();
   const sx = fR.left + fR.width/2; const sy = fR.top + fR.height/2;
@@ -558,7 +573,8 @@ function fireBeam(fromEl, toEl) {
   const x2 = tR.left + tR.width/2; const y2 = tR.top + tR.height/2;
   const len = Math.hypot(x2 - x1, y2 - y1);
   const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-  line.setAttribute('x1', x1); line.setAttribute('y1', y1); line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+  line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+  line.setAttribute('x2', x2); line.setAttribute('y2', y2);
   line.setAttribute('stroke', '#00e5a0'); line.setAttribute('stroke-width', '1.5');
   line.setAttribute('stroke-dasharray', len); line.setAttribute('stroke-dashoffset', len);
   line.style.animation = `beamTravel 0.45s ease-in-out forwards`;
@@ -573,7 +589,7 @@ function interceptDeploy(e) {
   const destUser = document.getElementById('dest-select').value;
   const tarea = document.getElementById('tarea-input').value.trim();
   
-  if (!tarea) return;
+  if (!tarea || !destUser) return;
   btn.style.pointerEvents = 'none';
   bar.style.width = "100%";
   bar.style.transition = "width 0.4s ease";
@@ -601,6 +617,28 @@ function interceptDeploy(e) {
           if(indicator) { indicator.className = 'sdot sdot-active'; }
           
           document.getElementById('console-msg').textContent = data.frase;
+          
+          // Añadir entrada al log visual inmediatamente
+          const logList = document.getElementById('log-list');
+          const emptyLog = logList.querySelector('.empty-log');
+          if(emptyLog) emptyLog.remove();
+          
+          const now = new Date();
+          const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+          const dateStr = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}`;
+          
+          const logEntry = document.createElement('div');
+          logEntry.className = 'log-entry fade-in';
+          logEntry.innerHTML = `
+            <span class="log-user">${destUser}</span>
+            <div>
+              <div class="log-name">${tarea}</div>
+              <div class="log-via">Por: {{ usuario }}</div>
+              <span class="tag-deploy">Desplegada</span>
+            </div>
+            <div class="log-time">${timeStr} <br> ${dateStr}</div>
+          `;
+          logList.insertBefore(logEntry, logList.firstChild);
         }, 450);
       }
       setTimeout(() => { bar.style.width = "0%"; btn.style.pointerEvents = 'auto'; }, 600);
@@ -614,3 +652,4 @@ function interceptDeploy(e) {
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
+    
