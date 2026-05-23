@@ -166,6 +166,68 @@ def logout():
     return redirect(url_for("login"))
 
 
+# ── RUTA CRÍTICA: usada por logic.py cada 10s para obtener tareas ──
+@app.route("/get_data")
+def get_data():
+    user = request.args.get("user")
+    if not user:
+        return jsonify({"error": "user requerido"}), 400
+    db = cargar_db()
+    if user in db and user != "log_global":
+        d = db[user]["datos"]
+        return jsonify({
+            "tarea":     d.get("tarea_actual", "Esperando mando..."),
+            "tiempo":    d.get("tiempo_actual", 0),
+            "id":        d.get("id_envio", 0),
+            "remitente": d.get("enviado_por", "Sistema")
+        })
+    return jsonify({"error": "usuario no encontrado"}), 404
+
+
+# ── RUTA CRÍTICA: usada por logic.py para reportar éxito/retraso ──
+@app.route("/reportar_progreso", methods=["POST"])
+def reportar_progreso():
+    data = request.get_json(silent=True) or {}
+    user         = data.get("user")
+    estado       = data.get("estado", "EXITO")   # "EXITO" o "RETRASO"
+    tarea_nombre = data.get("tarea_nombre", "")
+    if not user:
+        return jsonify({"ok": False, "error": "user requerido"}), 400
+    db = cargar_db()
+    if user not in db or user == "log_global":
+        return jsonify({"ok": False, "error": "usuario no encontrado"}), 404
+
+    db_user    = db[user]["datos"]
+    es_retraso = (estado == "RETRASO")
+
+    # Nombre de tarea: usa el enviado, o el que tiene guardado
+    nombre_final = tarea_nombre or db_user.get("tarea_actual", "Sin nombre")
+
+    # No loguear si es el estado vacío de inicio
+    if nombre_final not in ("Esperando mando...", "Misión Cumplida", "Finalizada con Retraso"):
+        entrada = {
+            "usuario":     user,
+            "tarea":       nombre_final,
+            "fecha":       datetime.now().strftime("%H:%M\n%d/%m"),
+            "enviado_por": db_user.get("enviado_por", "Sistema"),
+            "retraso":     es_retraso
+        }
+        if "log_global" not in db:
+            db["log_global"] = []
+        db["log_global"].append(entrada)
+
+    # Actualizar estadísticas y estado
+    if es_retraso:
+        db_user["rendimiento"]["retrasos"] += 1
+        db_user["tarea_actual"] = "Finalizada con Retraso"
+    else:
+        db_user["rendimiento"]["exitos"] += 1
+        db_user["tarea_actual"] = "Misión Cumplida"
+
+    guardar_db(db)
+    return jsonify({"ok": True, "msg": "Telemetría registrada"})
+
+
 HTML_AUTH = """
 <!DOCTYPE html>
 <html lang="es">
@@ -891,8 +953,11 @@ function prependLog(destUser, tarea, sessionUser) {
 /* ═══════════════════════════════════════════
    MAIN: interceptDeploy
 ═══════════════════════════════════════════ */
+var _deploying = false;
 function interceptDeploy(e) {
   e.preventDefault();
+  if (_deploying) return;
+
   var btn      = document.getElementById('deploy-btn');
   var btnIcon  = document.getElementById('btn-icon');
   var btnTxt   = document.getElementById('btn-txt');
@@ -901,37 +966,52 @@ function interceptDeploy(e) {
   var tarea    = document.getElementById('tarea-input').value.trim();
   if (!tarea || !destUser) return;
 
-  /* —— PHASE 1: countdown 3-2-1 —— */
+  _deploying = true;
+  btn.style.pointerEvents = 'none';
+
+  function resetBtn() {
+    _deploying = false;
+    btn.style.pointerEvents = 'auto';
+    btn.classList.remove('sending', 'done');
+    btnIcon.className = 'ti ti-player-play';
+    btnTxt.textContent = 'Desplegar mision';
+    bar.style.transition = 'none';
+    bar.style.width = '0%';
+  }
+
+  /* FASE 1: countdown 3-2-1 */
   runCountdown(function(){
 
-    /* —— PHASE 2: button → sending state + progress bar —— */
+    /* FASE 2: boton sending + barra */
     btn.classList.add('sending');
     btnIcon.className = 'ti ti-loader-2';
     btnTxt.textContent = 'Transmitiendo...';
-    bar.style.transition = 'none'; bar.style.width = '0%';
+    bar.style.transition = 'none';
+    bar.style.width = '0%';
     requestAnimationFrame(function(){ requestAnimationFrame(function(){
-      bar.style.transition = 'width 1.0s linear'; bar.style.width = '100%';
+      bar.style.transition = 'width 1.1s linear';
+      bar.style.width = '100%';
     }); });
 
-    /* —— PHASE 3: at 500ms fire beam —— */
+    /* FASE 3: 450ms -> beam SVG */
     setTimeout(function(){
       var destAvatar = document.getElementById('av-' + destUser);
-      fireBeam(btn, destAvatar);
-    }, 500);
+      if (destAvatar) fireBeam(btn, destAvatar);
+    }, 450);
 
-    /* —— PHASE 4: at 800ms: particles + scan + highlight + overlay —— */
+    /* FASE 4: 750ms -> particulas + efectos + fetch */
     setTimeout(function(){
       var destAvatar = document.getElementById('av-' + destUser);
-      spawnParticles(btn, destAvatar);
+      if (destAvatar) spawnParticles(btn, destAvatar);
 
       screenFlash();
       triggerScanLine(destUser);
       highlightRow(destUser);
 
       var sdot = document.getElementById('sdot-' + destUser);
-      if (sdot) { sdot.className = 'sdot sdot-active'; }
+      if (sdot) sdot.className = 'sdot sdot-active';
 
-      /* POST to server */
+      /* POST al servidor */
       var formData = new FormData(document.getElementById('deploy-form'));
       fetch('/enviar_tarea_web', { method: 'POST', body: formData })
       .then(function(r){ return r.json(); })
@@ -939,38 +1019,38 @@ function interceptDeploy(e) {
         if (data.success) {
           showLaunchOverlay(destUser, tarea);
 
-          /* burst on avatar arrival */
           setTimeout(function(){
-            burstParticles(document.getElementById('av-' + destUser));
-          }, 150);
+            var av = document.getElementById('av-' + destUser);
+            if (av) burstParticles(av);
+          }, 180);
 
           typeTask(destUser, tarea);
           typeConsole(data.frase);
           prependLog(destUser, tarea, '{{ usuario }}');
 
-          /* button → done */
-          bar.style.transition = 'none'; bar.style.width = '0%';
           btn.classList.remove('sending');
           btn.classList.add('done');
           btnIcon.className = 'ti ti-check';
           btnTxt.textContent = 'Desplegada';
 
-          /* reset button after 2.5s */
           setTimeout(function(){
-            btn.classList.remove('done');
-            btnIcon.className = 'ti ti-player-play';
-            btnTxt.textContent = 'Desplegar misión';
+            resetBtn();
             document.getElementById('tarea-input').value = '';
           }, 2500);
+
+        } else {
+          typeConsole('ERROR: ' + (data.error || 'Fallo de transmision'));
+          resetBtn();
         }
+      })
+      .catch(function(){
+        typeConsole('ERROR: Sin conexion con el servidor LUMINA');
+        resetBtn();
       });
-    }, 800);
+    }, 750);
   });
 }
 
-/* ═══════════════════════════════════════════
-   AGREGAR OPERADOR AJAX
-═══════════════════════════════════════════ */
 function toggleAddBox() {
   var box = document.getElementById('add-box');
   box.style.display = (box.style.display === 'block') ? 'none' : 'block';
