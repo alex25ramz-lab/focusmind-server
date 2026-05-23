@@ -110,10 +110,12 @@ def enviar_tarea_web():
         return jsonify({"success": False, "error": "Datos incompletos"}), 400
     db = cargar_db()
     if destinatario in db and destinatario != "log_global":
-        db[destinatario]["datos"]["tarea_actual"] = tarea
-        db[destinatario]["datos"]["tiempo_actual"] = int(mins)
-        db[destinatario]["datos"]["enviado_por"] = session["usuario"]
-        db[destinatario]["datos"]["ultimo_msj"] = random.choice(FRASES_LUMINA)
+        db[destinatario]["datos"]["tarea_actual"]   = tarea
+        db[destinatario]["datos"]["tiempo_actual"]  = int(mins)
+        db[destinatario]["datos"]["enviado_por"]    = session["usuario"]
+        db[destinatario]["datos"]["ultimo_msj"]     = random.choice(FRASES_LUMINA)
+        db[destinatario]["datos"]["id_envio"]       = db[destinatario]["datos"].get("id_envio", 0) + 1
+        db[destinatario]["datos"]["_ui_consumida"]  = False   # ui.py puede leerla
         nuevo_log = {
             "usuario": destinatario,
             "tarea": tarea,
@@ -165,6 +167,81 @@ def logout():
     session.pop("usuario", None)
     return redirect(url_for("login"))
 
+
+# ══════════════════════════════════════════════════════════════════
+#  ENDPOINTS LEGACY — usados por ui.py (FocusMind OS antiguo)
+#  ui.py llama a /obtener_datos (GET) y /actualizar (POST)
+# ══════════════════════════════════════════════════════════════════
+
+# Almacén temporal en memoria para el canal ui.py
+# (usa la misma DB pero con claves separadas para no mezclarse)
+_cola_ui = {}   # { usuario: {"ultima_tarea": str, "tiempo_meta": str} }
+
+@app.route("/obtener_datos", methods=["GET"])
+def obtener_datos():
+    """
+    Usado por ui.py → escuchar_nube().
+    Devuelve la última tarea pendiente para el usuario (o global si no hay user param).
+    ui.py espera: { "ultima_tarea": str, "tiempo_meta": str }
+    """
+    user = request.args.get("user", "__global__")
+    db = cargar_db()
+
+    # Busca en todos los operadores si alguno tiene tarea nueva marcada para UI
+    # ui.py no manda 'user', así que respondemos con la primera tarea pendiente
+    for op, info in db.items():
+        if op == "log_global":
+            continue
+        d = info.get("datos", {})
+        tarea = d.get("tarea_actual", "Esperando mando...")
+        if tarea not in ("Esperando mando...", "Mision Cumplida",
+                         "Finalizada con Retraso", "Ninguna", ""):
+            # Solo devolvemos si no fue ya consumida
+            if not d.get("_ui_consumida", False):
+                return jsonify({
+                    "ultima_tarea": tarea,
+                    "tiempo_meta":  str(d.get("tiempo_actual", 25))
+                })
+
+    return jsonify({"ultima_tarea": "Ninguna", "tiempo_meta": "25"})
+
+
+@app.route("/actualizar", methods=["POST"])
+def actualizar():
+    """
+    Usado por ui.py para marcar que ya consumió la tarea
+    (manda {"ultima_tarea": "Ninguna"} para limpiar).
+    También acepta {"usuario": x, "ultima_tarea": y} para asignar tareas.
+    """
+    data = request.get_json(silent=True) or {}
+    nueva_tarea = data.get("ultima_tarea", "")
+    user        = data.get("usuario", "")
+
+    db = cargar_db()
+
+    if nueva_tarea in ("Ninguna", "", None):
+        # ui.py está limpiando — marcar como consumida en todos los operadores
+        for op, info in db.items():
+            if op != "log_global":
+                info["datos"]["_ui_consumida"] = True
+        guardar_db(db)
+        return jsonify({"ok": True, "msg": "Cola limpiada"})
+
+    if user and user in db and user != "log_global":
+        # Asignación directa a un usuario específico
+        db[user]["datos"]["tarea_actual"]   = nueva_tarea
+        db[user]["datos"]["tiempo_actual"]  = int(data.get("tiempo_meta", 25))
+        db[user]["datos"]["_ui_consumida"]  = False
+        db[user]["datos"]["id_envio"]      += 1
+        guardar_db(db)
+        return jsonify({"ok": True})
+
+    return jsonify({"ok": False, "error": "Sin datos válidos"}), 400
+
+
+# ══════════════════════════════════════════════════════════════════
+#  ENDPOINTS PRINCIPALES — usados por logic.py (main.py / LUMINA)
+# ══════════════════════════════════════════════════════════════════
 
 # ── RUTA CRÍTICA: usada por logic.py cada 10s para obtener tareas ──
 @app.route("/get_data")
