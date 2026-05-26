@@ -7,7 +7,8 @@ import json
 app = Flask(__name__)
 app.secret_key = "lumina_proto_2026_key_ultra_secure"
 
-DB_FILE = "database.json"
+# En Render, se usará una ruta local temporal para guardar la sesión si es necesario
+DB_FILE = "/tmp/database.json" if os.environ.get("RENDER") else "database.json"
 
 def inicializar_perfil(nombre):
     return {
@@ -17,7 +18,8 @@ def inicializar_perfil(nombre):
         "enviado_por": "Sistema",
         "historial": [],
         "rendimiento": {"exitos": 0, "retrasos": 0, "total": 0},
-        "ultimo_msj": f"Sistemas LUMINA inicializados para {nombre}."
+        "ultimo_msj": f"Sistemas LUMINA inicializados para {nombre}.",
+        "_ui_consumida": True  # Asegura el estado limpio inicial
     }
 
 def cargar_db():
@@ -53,7 +55,7 @@ FRASES_LUMINA = [
     "Transmisión confirmada. Operador en modo activo."
 ]
 
-# ── ENDPOINTS DE COMUNICACIÓN CON LOGIC.PY ──
+# ── ENDPOINTS DE COMUNICACIÓN CON LA LAPTOP (LOGIC.PY) ──
 
 @app.route("/get_data", methods=["GET"])
 def get_data():
@@ -64,6 +66,15 @@ def get_data():
     db = cargar_db()
     if usuario in db and usuario != "log_global":
         datos_op = db[usuario]["datos"]
+        
+        # Si la interfaz de la laptop ya consumió la tarea anterior, le decimos que espere
+        if datos_op.get("_ui_consumida", False):
+            return jsonify({
+                "tarea": "Esperando mando...",
+                "tiempo": 0,
+                "id": 0
+            })
+            
         return jsonify({
             "tarea": datos_op.get("tarea_actual", "Esperando mando..."),
             "tiempo": datos_op.get("tiempo_actual", 0),
@@ -76,12 +87,16 @@ def get_data():
 def ack_tarea():
     data = request.get_json() or {}
     usuario = data.get("user")
+    id_tarea = data.get("id")
     
     if not usuario:
         return jsonify({"success": False, "error": "Datos inválidos"}), 400
         
     db = cargar_db()
     if usuario in db:
+        # Marcamos como consumida para que la laptop empiece el cronómetro y no pida duplicados
+        if db[usuario]["datos"].get("id_envio") == id_tarea:
+            db[usuario]["datos"]["_ui_consumida"] = True
         guardar_db(db)
         return jsonify({"success": True})
     return jsonify({"success": False, "error": "Usuario no encontrado"}), 404
@@ -98,7 +113,6 @@ def reportar_progreso():
         
     db = cargar_db()
     if usuario in db:
-        # Sumamos las estadísticas en el perfil del operador basado en el estado finalizado
         if estado == "Misión Cumplida":
             db[usuario]["datos"]["rendimiento"]["exitos"] += 1
         elif estado == "Finalizada con Retraso":
@@ -106,9 +120,10 @@ def reportar_progreso():
             
         db[usuario]["datos"]["rendimiento"]["total"] += 1
         
-        # Una vez guardado el estado, regresamos la interfaz a reposo
+        # Reseteamos el estado en el servidor central
         db[usuario]["datos"]["tarea_actual"] = "Esperando mando..."
         db[usuario]["datos"]["tiempo_actual"] = 0
+        db[usuario]["datos"]["_ui_consumida"] = True
         
         guardar_db(db)
         return jsonify({"success": True})
@@ -116,7 +131,7 @@ def reportar_progreso():
     return jsonify({"success": False, "error": "Operador no registrado"}), 404
 
 
-# ── INTERFAZ WEB ROUTING ──
+# ── INTERFAZ WEB CONTROL INTERNO ──
 
 @app.route("/", methods=["GET", "POST"])
 def login():
@@ -192,7 +207,8 @@ def enviar_tarea_web():
         db[destinatario]["datos"]["id_envio"] = random.randint(1000, 9999)
         db[destinatario]["datos"]["enviado_por"] = session["usuario"]
         db[destinatario]["datos"]["ultimo_msj"] = random.choice(FRASES_LUMINA)
-        
+        db[destinatario]["datos"]["_ui_consumida"] = False  # ← ¡AQUÍ ESTÁ EL TRUCO! Alerta que hay una nueva tarea lista
+
         nuevo_log = {
             "usuario": destinatario,
             "tarea": tarea,
@@ -257,7 +273,7 @@ def logout():
     return redirect(url_for("login"))
 
 
-# ── ESTRUCTURAS VISUALES HTML FRONTEND ──
+# ── VISTAS HTML INTEGRADAS ──
 
 HTML_AUTH = """
 <!DOCTYPE html>
@@ -286,7 +302,7 @@ HTML_AUTH = """
   <div class="auth-wrap">
     <div class="logo-block">
       <h1>LUMINA OS</h1>
-      <div class="sub">Sistema de gestión de misiones</div>
+      <div class="sub">Sistema de misiones</div>
     </div>
     <form method="POST">
       <div class="field">
@@ -351,11 +367,6 @@ HTML_PANEL = """
     .btn-bar { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--neon); width: 0%; box-shadow: 0 0 8px rgba(0,229,160,0.6); }
     
     .op-row { display: grid; grid-template-columns: 40px 1fr auto auto; gap: 14px; align-items: center; padding: 13px 0; border-bottom: 0.5px solid var(--border); position: relative; transition: all 0.4s ease; border-radius: 8px; }
-    .op-row.targeted { background: rgba(0,229,160,0.04); }
-    .op-row .row-ripple { position: absolute; left: 0; top: 0; right: 0; bottom: 0; border-radius: 8px; pointer-events: none; border: 1.5px solid var(--neon); opacity: 0; }
-    .op-row.targeted .row-ripple { animation: rippleRow 0.7s ease-out forwards; }
-    .scan-line { position: absolute; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--neon), transparent); top: 0; opacity: 0; pointer-events: none; }
-    .scan-line.scanning { animation: scanDown 0.55s linear forwards; }
     .op-avatar { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Share Tech Mono', monospace; font-size: 10px; font-weight: 600; }
     .av-neon { background: rgba(0,229,160,0.1); color: var(--neon); border: 0.5px solid var(--neon-border); }
     .av-blue { background: rgba(90,120,255,0.1); color: #8fa8ff; border: 0.5px solid rgba(90,120,255,0.25); }
@@ -374,8 +385,7 @@ HTML_PANEL = """
     .del-btn { font-size: 12px; color: rgba(255,79,79,0.5); cursor: pointer; border: 0.5px solid rgba(255,79,79,0.2); padding: 5px 8px; border-radius: 6px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
     .del-btn:hover { color: var(--red); background: rgba(255,79,79,0.1); border-color: var(--red); }
     .add-link { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--neon); opacity: 0.7; margin-top: 14px; font-family: 'Share Tech Mono', monospace; cursor: pointer; border: 0.5px dashed var(--neon-border); padding: 6px 12px; border-radius: 6px; }
-    .add-link:hover { opacity: 1; background: rgba(0,229,160,0.02); }
-    .add-box-wrap { display: none; margin-top: 12px; padding: 12px; background: #080909; border: 0.5px solid var(--neon-border); border-radius: 8px; animation: fadeSlide 0.2s ease both; }
+    .add-box-wrap { display: none; margin-top: 12px; padding: 12px; background: #080909; border: 0.5px solid var(--neon-border); border-radius: 8px; }
     .add-box-form { display: flex; gap: 8px; }
 
     .log-scroll { max-height: 260px; overflow-y: auto; }
@@ -386,7 +396,6 @@ HTML_PANEL = """
     .tag-deploy { font-size: 8px; color: #8fa8ff; border: 0.5px solid rgba(90,120,255,0.3); padding: 2px 6px; border-radius: 3px; font-family: 'Share Tech Mono', monospace; }
     .log-time { font-size: 9px; color: #555; text-align: right; font-family: 'Share Tech Mono', monospace; }
     .empty-log { color: var(--muted); font-size: 11px; text-align: center; padding: 28px 0; }
-    .particle { position: fixed; border-radius: 50%; pointer-events: none; z-index: 9999; animation: particleFly var(--dur) ease-out var(--delay) both; }
     
     .launch-overlay { position: fixed; inset: 0; z-index: 8000; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; transition: opacity 0.25s; }
     .launch-overlay.active { opacity: 1; }
@@ -396,39 +405,33 @@ HTML_PANEL = """
     .launch-name { font-size: 22px; color: var(--neon); letter-spacing: 3px; }
     
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-    @keyframes fadeSlide { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
-    @keyframes particleFly { 0%{opacity:1;transform:translate(0,0) scale(1)} 100%{opacity:0;transform:translate(var(--tx),var(--ty)) scale(0)} }
-    @keyframes scanDown { 0%{top:0;opacity:0.9} 100%{top:100%;opacity:0} }
-    @keyframes rippleRow { 0%{opacity:0.8;transform:scale(1)} 100%{opacity:0;transform:scale(1.03)} }
-    @keyframes beamTravel { 0% { stroke-dashoffset: 300; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0; } }
     .fade-in { animation: fadeSlide 0.35s ease both; }
+    @keyframes fadeSlide { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
   </style>
 </head>
 <body>
 
 <div class="launch-overlay" id="launch-overlay">
   <div class="launch-box">
-    <div class="launch-title">MISIÓN DESPLEGADA</div>
+    <div class="launch-title">MISIÓN ENVIADA A RENDER</div>
     <div class="launch-name" id="launch-dest">—</div>
   </div>
 </div>
 
-<svg id="beam-svg" style="position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:7999;" xmlns="http://www.w3.org/2000/svg"></svg>
-
 <div class="wrap">
   <div class="top-bar">
-    <div class="session-info"><span class="dot-live"></span>SESIÓN: {{ usuario }}</div>
+    <div class="session-info"><span class="dot-live"></span>RED EN LA NUBE: {{ usuario }}</div>
     <a href="/logout" class="logout-link">[ SALIR ]</a>
   </div>
-  <div class="logo"><h1>LUMINA OS</h1><div class="sub">Sistema de gestión de misiones</div></div>
+  <div class="logo"><h1>LUMINA OS</h1><div class="sub">Consola de Misiones Globales</div></div>
   
   <div class="console">
     <span class="prompt">&gt;</span>
     <span class="msg" id="console-msg">{{ ultimo_msj }}<span class="cursor"></span></span>
   </div>
 
-  <div class="card fade-in" id="form-card">
-    <div class="card-label"><i class="ti ti-rocket"></i> Desplegar actividad</div>
+  <div class="card fade-in">
+    <div class="card-label"><i class="ti ti-rocket"></i> Desplegar Actividad Global</div>
     <form id="deploy-form" onsubmit="interceptDeploy(event)">
       <div class="form-row">
         <div class="form-group">
@@ -446,37 +449,33 @@ HTML_PANEL = """
       </div>
       <div class="form-group full-field">
         <label>Misión / Objetivo</label>
-        <input type="text" name="tarea" id="tarea-input" placeholder="Ej: Revisar módulo de misiones" required>
+        <input type="text" name="tarea" id="tarea-input" placeholder="Escribe la actividad técnica..." required>
       </div>
       <button type="submit" class="deploy-btn" id="deploy-btn">
         <i class="ti ti-player-play"></i>
-        <span id="btn-txt">Desplegar misión</span>
+        <span>Desplegar misión global</span>
         <div class="btn-bar" id="btn-bar"></div>
       </button>
     </form>
   </div>
 
-  <div class="card fade-in" id="monitor-card">
-    <div class="card-label"><i class="ti ti-radar"></i> Monitor de equipo</div>
+  <div class="card fade-in">
+    <div class="card-label"><i class="ti ti-radar"></i> Monitor de Operadores</div>
     <div id="operator-rows-container">
       {% set avatares = ['av-neon','av-blue','av-amber'] %}
       {% for op_name, op_info in equipo.items() if op_name != 'log_global' %}
-      {% set loop_idx = loop.index0 %}
-      <div class="op-row" id="row-{{ op_name }}" data-user="{{ op_name }}">
-        <div class="row-ripple"></div>
-        <div class="scan-line" id="scan-{{ op_name }}"></div>
-        <div class="op-avatar {{ avatares[loop_idx % 3] }}" id="av-{{ op_name }}">{{ op_name[:2].upper() }}</div>
+      <div class="op-row" id="row-{{ op_name }}">
+        <div class="op-avatar {{ avatares[loop.index0 % 3] }}">{{ op_name[:2].upper() }}</div>
         <div>
           <div class="op-name">{{ op_name }}</div>
-          <div class="op-task" id="task-label-{{ op_name }}">
-            {% if op_info.datos.tarea_actual == 'Esperando mando...' %}
-              <span class="sdot sdot-idle"></span>
+          <div class="op-task">
+            {% if op_info.datos.tarea_actual == 'Esperando mando...' or op_info.datos._ui_consumida %}
+              <span class="sdot sdot-idle"></span><span>Esperando mando...</span>
             {% else %}
-              <span class="sdot sdot-active"></span>
+              <span class="sdot sdot-active"></span><span>{{ op_info.datos.tarea_actual }}</span>
             {% endif %}
-            <span id="task-txt-{{ op_name }}">{{ op_info.datos.tarea_actual }}</span>
           </div>
-          <div class="op-via" id="via-{{ op_name }}">vía: {{ op_info.datos.enviado_por }}</div>
+          <div class="op-via">Enviado por: {{ op_info.datos.enviado_por }}</div>
         </div>
         <div class="op-stats">
           <span class="stat-chip stat-ok"><i class="ti ti-check"></i>{{ op_info.datos.rendimiento.exitos }}</span>
@@ -484,9 +483,7 @@ HTML_PANEL = """
         </div>
         <div>
           {% if op_name != 'operador1' %}
-            <div onclick="eliminarOperadorAjax('{{ op_name }}')" class="del-btn" title="Dar de baja">
-              <i class="ti ti-trash"></i>
-            </div>
+            <div onclick="eliminarOperadorAjax('{{ op_name }}')" class="del-btn"><i class="ti ti-trash"></i></div>
           {% else %}
             <div style="width:28px;"></div>
           {% endif %}
@@ -494,140 +491,17 @@ HTML_PANEL = """
       </div>
       {% endfor %}
     </div>
-
-    <div class="add-link" onclick="toggleAddBox()"><i class="ti ti-user-plus"></i> Registrar nuevo operador</div>
-    <div class="add-box-wrap" id="add-box">
-      <form class="add-box-form" onsubmit="agregarOperadorAjax(event)">
-        <input type="text" id="nuevo-usuario-input" placeholder="ID del nuevo operador" required>
-        <button type="submit" class="deploy-btn" style="width: auto; padding: 0 16px;"><i class="ti ti-plus"></i></button>
-      </form>
-    </div>
-  </div>
-
-  <div class="card fade-in">
-    <div class="card-label"><i class="ti ti-list-check"></i> Registro de misiones</div>
-    <div class="log-scroll" id="log-list">
-      {% if log_global %}
-        {% for log in log_global[::-1] %}
-        <div class="log-entry">
-          <span class="log-user">{{ log.usuario }}</span>
-          <div>
-            <div class="log-name">{{ log.tarea }}</div>
-            <div class="log-via">Por: {{ log.enviado_por }}</div>
-            <span class="tag-deploy">Desplegada</span>
-          </div>
-          <div class="log-time">{{ log.fecha }}</div>
-        </div>
-        {% endfor %}
-      {% else %}
-        <div class="empty-log">Esperando misiones...</div>
-      {% endif %}
-    </div>
   </div>
 </div>
 
 <script>
-function typeConsole(txt){
-  document.getElementById('console-msg').textContent = txt;
-}
-function toggleAddBox() {
-  const box = document.getElementById('add-box');
-  box.style.display = (box.style.display === 'block') ? 'none' : 'block';
-  if(box.style.display === 'block') document.getElementById('nuevo-usuario-input').focus();
-}
-
-function agregarOperadorAjax(e) {
-  e.preventDefault();
-  const input = document.getElementById('nuevo-usuario-input');
-  const nombre = input.value.trim();
-  if(!nombre) return;
-
-  const formData = new FormData();
-  formData.append('nuevo_usuario', nombre);
-
-  fetch('/agregar_usuario_ajax', { method: 'POST', body: formData })
-  .then(res => res.json())
-  .then(data => {
-    if(data.success) {
-      typeConsole(data.frase);
-      input.value = '';
-      toggleAddBox();
-
-      const container = document.getElementById('operator-rows-container');
-      const totalRows = container.querySelectorAll('.op-row').length;
-      const avClasses = ['av-neon', 'av-blue', 'av-amber'];
-      const currentAv = avClasses[totalRows % 3];
-
-      const newRow = document.createElement('div');
-      newRow.className = 'op-row fade-in';
-      newRow.id = 'row-'+data.nombre;
-      newRow.innerHTML = '<div class="row-ripple"></div><div class="scan-line" id="scan-'+data.nombre+'"></div><div class="op-avatar '+currentAv+'">'+data.iniciales+'</div><div><div class="op-name">'+data.nombre+'</div><div class="op-task" id="task-label('+data.nombre+')"><span class="sdot sdot-idle"></span><span id="task-txt-'+data.nombre+'">Esperando mando...</span></div><div class="op-via" id="via-'+data.nombre+'">vía: Sistema</div></div><div class="op-stats"><span class="stat-chip stat-ok"><i class="ti ti-check"></i>0</span><span class="stat-chip stat-bad"><i class="ti ti-clock"></i>0</span></div><div><div onclick="eliminarOperadorAjax(\''+data.nombre+'\')" class="del-btn"><i class="ti ti-trash"></i></div></div>';
-      container.appendChild(newRow);
-      var opt = document.createElement('option'); opt.value = data.nombre; opt.textContent = data.nombre;
-      document.getElementById('dest-select').appendChild(opt);
-    } else { typeConsole('ERROR: '+data.error); }
-  });
-}
-
-function eliminarOperadorAjax(nombre) {
-  if (!confirm('¿Desconectar frecuencia de '+nombre+'?')) return;
-  fetch('/eliminar_usuario_ajax/'+nombre, { method: 'POST' })
-  .then(function(r){ return r.json(); })
-  .then(function(data){
-    if (data.success) {
-      typeConsole(data.frase);
-      var row = document.getElementById('row-'+nombre);
-      if (row) { row.style.transition = 'opacity 0.35s,transform 0.35s'; row.style.opacity = '0'; row.style.transform = 'translateX(-20px)'; setTimeout(function(){ row.remove(); }, 400); }
-      var opt = document.querySelector('#dest-select option[value="'+nombre+'"]');
-      if (opt) opt.remove();
-    } else { typeConsole('ERROR: '+data.error); }
-  });
-}
-
-function spawnParticles(fromEl, toEl) {
-  const fR = fromEl.getBoundingClientRect(); const tR = toEl.getBoundingClientRect();
-  const sx = fR.left + fR.width/2; const sy = fR.top + fR.height/2;
-  const tx0 = tR.left + tR.width/2 - sx; const ty0 = tR.top + tR.height/2 - sy;
-  for (let i = 0; i < 12; i++) {
-    const p = document.createElement('div');
-    const sz = 3 + Math.random() * 3;
-    const tx = tx0 + (Math.random() - 0.5) * 40; const ty = ty0 + (Math.random() - 0.5) * 40;
-    const dur = 0.4 + Math.random() * 0.3; const del = i * 0.02;
-    p.className = 'particle';
-    p.style.cssText = `width:${sz}px;height:${sz}px;background:#00e5a0;left:${sx}px;top:${sy}px;--tx:${tx}px;--ty:${ty}px;--dur:${dur}s;--delay:${del}s;`;
-    document.body.appendChild(p);
-    setTimeout(() => p.remove(), (dur + del) * 1000 + 100);
-  }
-}
-
-function fireBeam(fromEl, toEl) {
-  const svg = document.getElementById('beam-svg');
-  const fR = fromEl.getBoundingClientRect(); const tR = toEl.getBoundingClientRect();
-  const x1 = fR.left + fR.width/2; const y1 = fR.top + fR.height/2;
-  const x2 = tR.left + tR.width/2; const y2 = tR.top + tR.height/2;
-  const len = Math.hypot(x2 - x1, y2 - y1);
-  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-  line.setAttribute('x1', x1); line.setAttribute('y1', y1);
-  line.setAttribute('x2', x2); line.setAttribute('y2', y2);
-  line.setAttribute('stroke', '#00e5a0'); line.setAttribute('stroke-width', '1.5');
-  line.setAttribute('stroke-dasharray', len); line.setAttribute('stroke-dashoffset', len);
-  line.style.animation = `beamTravel 0.45s ease-in-out forwards`;
-  svg.appendChild(line);
-  setTimeout(() => line.remove(), 500);
-}
+function typeConsole(txt){ document.getElementById('console-msg').textContent = txt; }
 
 function interceptDeploy(e) {
   e.preventDefault();
-  const btn = document.getElementById('deploy-btn');
-  const bar = document.getElementById('btn-bar');
   const destUser = document.getElementById('dest-select').value;
   const tarea = document.getElementById('tarea-input').value.trim();
   
-  if (!tarea || !destUser) return;
-  btn.style.pointerEvents = 'none';
-  bar.style.width = "100%";
-  bar.style.transition = "width 0.4s ease";
-
   const formData = new FormData(document.getElementById('deploy-form'));
   
   fetch('/enviar_tarea_web', { method: 'POST', body: formData })
@@ -636,47 +510,17 @@ function interceptDeploy(e) {
     if(data.success) {
       const ov = document.getElementById('launch-overlay');
       document.getElementById('launch-dest').textContent = destUser.toUpperCase();
-      ov.classList.add('active'); setTimeout(() => ov.classList.remove('active'), 1200);
-
-      const row = document.getElementById('row-' + destUser);
-      if(row) {
-        fireBeam(btn, row);
-        setTimeout(() => {
-          spawnParticles(btn, row);
-          const scan = document.getElementById('scan-' + destUser);
-          if(scan) { scan.classList.remove('scanning'); void scan.offsetWidth; scan.classList.add('scanning'); }
-          
-          document.getElementById('task-txt-' + destUser).textContent = tarea;
-          const indicator = document.querySelector(`#task-label-${destUser} .sdot`);
-          if(indicator) { indicator.className = 'sdot sdot-active'; }
-          
-          typeConsole(data.frase);
-          
-          const logList = document.getElementById('log-list');
-          const emptyLog = logList.querySelector('.empty-log');
-          if(emptyLog) emptyLog.remove();
-          
-          const now = new Date();
-          const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-          const dateStr = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}`;
-          
-          const logEntry = document.createElement('div');
-          logEntry.className = 'log-entry fade-in';
-          logEntry.innerHTML = `
-            <span class="log-user">${destUser}</span>
-            <div>
-              <div class="log-name">${tarea}</div>
-              <div class="log-via">Por: {{ usuario }}</div>
-              <span class="tag-deploy">Desplegada</span>
-            </div>
-            <div class="log-time">${timeStr} <br> ${dateStr}</div>
-          `;
-          logList.insertBefore(logEntry, logList.firstChild);
-        }, 450);
-      }
-      setTimeout(() => { bar.style.width = "0%"; btn.style.pointerEvents = 'auto'; }, 600);
+      ov.classList.add('active'); 
+      setTimeout(() => { ov.classList.remove('active'); location.reload(); }, 1100);
     }
   });
+}
+
+function eliminarOperadorAjax(nombre) {
+  if (!confirm('¿Desconectar operador '+nombre+' de Render?')) return;
+  fetch('/eliminar_usuario_ajax/'+nombre, { method: 'POST' })
+  .then(r => r.json())
+  .then(data => { if(data.success) location.reload(); });
 }
 </script>
 </body>
@@ -684,4 +528,6 @@ function interceptDeploy(e) {
 """
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    # Render asignará automáticamente el puerto mediante variable de entorno, si no usa el 5000
+    puerto = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=puerto)
