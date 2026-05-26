@@ -67,7 +67,6 @@ def get_data():
     if usuario in db and usuario != "log_global":
         datos_op = db[usuario]["datos"]
         
-        # Si la interfaz de la laptop ya consumió la tarea anterior, le decimos que espere
         if datos_op.get("_ui_consumida", False):
             return jsonify({
                 "tarea": "Esperando mando...",
@@ -94,9 +93,14 @@ def ack_tarea():
         
     db = cargar_db()
     if usuario in db:
-        # Marcamos como consumida para que la laptop empiece el cronómetro y no pida duplicados
         if db[usuario]["datos"].get("id_envio") == id_tarea:
             db[usuario]["datos"]["_ui_consumida"] = True
+            
+            # Buscamos en el log global para cambiar el estado de "Desplegada" a "En ejecución"
+            for log in db.get("log_global", []):
+                if log.get("id_mision") == id_tarea:
+                    log["estado"] = "En ejecución"
+                    break
         guardar_db(db)
         return jsonify({"success": True})
     return jsonify({"success": False, "error": "Usuario no encontrado"}), 404
@@ -107,6 +111,7 @@ def reportar_progreso():
     data = request.get_json() or {}
     usuario = data.get("user")
     estado = data.get("estado")
+    id_tarea = data.get("id")
     
     if not usuario:
         return jsonify({"success": False, "error": "Faltan datos de usuario"}), 400
@@ -119,6 +124,12 @@ def reportar_progreso():
             db[usuario]["datos"]["rendimiento"]["retrasos"] += 1
             
         db[usuario]["datos"]["rendimiento"]["total"] += 1
+        
+        # Actualizamos el estado en el log histórico global
+        for log in db.get("log_global", []):
+            if log.get("id_mision") == id_tarea or (log.get("usuario") == usuario and log.get("estado") in ["Desplegada", "En ejecución"]):
+                log["estado"] = estado
+                break
         
         # Reseteamos el estado en el servidor central
         db[usuario]["datos"]["tarea_actual"] = "Esperando mando..."
@@ -202,19 +213,23 @@ def enviar_tarea_web():
         
     db = cargar_db()
     if destinatario in db and destinatario != "log_global":
+        id_mision_generada = random.randint(1000, 9999)
+        
         db[destinatario]["datos"]["tarea_actual"] = tarea
         db[destinatario]["datos"]["tiempo_actual"] = int(mins)
-        db[destinatario]["datos"]["id_envio"] = random.randint(1000, 9999)
+        db[destinatario]["datos"]["id_envio"] = id_mision_generada
         db[destinatario]["datos"]["enviado_por"] = session["usuario"]
         db[destinatario]["datos"]["ultimo_msj"] = random.choice(FRASES_LUMINA)
-        db[destinatario]["datos"]["_ui_consumida"] = False  # ← ¡AQUÍ ESTÁ EL TRUCO! Alerta que hay una nueva tarea lista
+        db[destinatario]["datos"]["_ui_consumida"] = False  
 
         nuevo_log = {
+            "id_mision": id_mision_generada,
             "usuario": destinatario,
             "tarea": tarea,
+            "tiempo_asignado": f"{mins} min",
             "enviado_por": session["usuario"],
-            "retraso": False,
-            "fecha": datetime.now().strftime("%H:%M \n %d/%m")
+            "estado": "Desplegada",
+            "fecha": datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
         }
         if "log_global" not in db:
             db["log_global"] = []
@@ -340,11 +355,11 @@ HTML_PANEL = """
     :root {
       --neon: #00e5a0; --neon-dim: rgba(0,229,160,0.10); --neon-border: rgba(0,229,160,0.22);
       --bg: #060708; --card: #0d0e10; --border: rgba(255,255,255,0.065);
-      --red: #ff4f4f; --amber: #f5a623; --muted: #555;
+      --red: #ff4f4f; --amber: #f5a623; --muted: #555; --blue: #3b82f6;
     }
     body { background: var(--bg); color: #e0e0e0; font-family: 'Syne', sans-serif; padding: 20px 16px 60px; }
     body::before { content: ''; position: fixed; inset: 0; background-image: linear-gradient(rgba(0,229,160,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,160,0.025) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; z-index: 0; }
-    .wrap { position: relative; z-index: 1; max-width: 580px; margin: 0 auto; }
+    .wrap { position: relative; z-index: 1; max-width: 680px; margin: 0 auto; }
     .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
     .session-info { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--neon); letter-spacing: 2px; text-transform: uppercase; font-family: 'Share Tech Mono', monospace; }
     .dot-live { width: 6px; height: 6px; border-radius: 50%; background: var(--neon); flex-shrink: 0; animation: pulse 1.8s infinite; }
@@ -384,19 +399,20 @@ HTML_PANEL = """
     
     .del-btn { font-size: 12px; color: rgba(255,79,79,0.5); cursor: pointer; border: 0.5px solid rgba(255,79,79,0.2); padding: 5px 8px; border-radius: 6px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
     .del-btn:hover { color: var(--red); background: rgba(255,79,79,0.1); border-color: var(--red); }
-    .add-link { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--neon); opacity: 0.7; margin-top: 14px; font-family: 'Share Tech Mono', monospace; cursor: pointer; border: 0.5px dashed var(--neon-border); padding: 6px 12px; border-radius: 6px; }
-    .add-box-wrap { display: none; margin-top: 12px; padding: 12px; background: #080909; border: 0.5px solid var(--neon-border); border-radius: 8px; }
-    .add-box-form { display: flex; gap: 8px; }
-
-    .log-scroll { max-height: 260px; overflow-y: auto; }
-    .log-entry { display: grid; grid-template-columns: 84px 1fr auto; gap: 10px; align-items: center; padding: 11px 0; border-bottom: 0.5px solid var(--border); }
-    .log-user { font-size: 11px; color: var(--neon); font-family: 'Share Tech Mono', monospace; }
-    .log-name { font-size: 12px; color: #ccc; }
-    .log-via { font-size: 9px; color: #444; font-family: 'Share Tech Mono', monospace; }
-    .tag-deploy { font-size: 8px; color: #8fa8ff; border: 0.5px solid rgba(90,120,255,0.3); padding: 2px 6px; border-radius: 3px; font-family: 'Share Tech Mono', monospace; }
-    .log-time { font-size: 9px; color: #555; text-align: right; font-family: 'Share Tech Mono', monospace; }
-    .empty-log { color: var(--muted); font-size: 11px; text-align: center; padding: 28px 0; }
     
+    /* ── TABLA DE LOGS MEJORADA REQUERIDA ── */
+    .table-container { width: 100%; overflow-x: auto; margin-top: 5px; }
+    table { width: 100%; border-collapse: collapse; font-family: 'Share Tech Mono', monospace; font-size: 12px; text-align: left; }
+    th { padding: 10px; color: var(--neon); border-bottom: 1px solid var(--neon-border); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+    td { padding: 12px 10px; border-bottom: 0.5px solid var(--border); color: #ccc; vertical-align: middle; }
+    tr:hover { background: rgba(255,255,255,0.02); }
+    
+    .badge { padding: 3px 7px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase; display: inline-block; }
+    .bg-desplegada { background: rgba(59,130,246,0.15); color: #60a5fa; border: 0.5px solid rgba(59,130,246,0.3); }
+    .bg-ejecucion { background: rgba(245,166,35,0.15); color: #fbbf24; border: 0.5px solid rgba(245,166,35,0.3); }
+    .bg-cumplida { background: rgba(0,229,160,0.15); color: var(--neon); border: 0.5px solid var(--neon-border); }
+    .bg-retraso { background: rgba(255,79,79,0.15); color: #f87171; border: 0.5px solid rgba(255,79,79,0.3); }
+
     .launch-overlay { position: fixed; inset: 0; z-index: 8000; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; transition: opacity 0.25s; }
     .launch-overlay.active { opacity: 1; }
     .launch-box { background: #080d0b; border: 0.5px solid var(--neon-border); border-radius: 16px; padding: 28px 40px; text-align: center; font-family: 'Share Tech Mono', monospace; transform: scale(0.88); transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1); }
@@ -492,6 +508,56 @@ HTML_PANEL = """
       {% endfor %}
     </div>
   </div>
+
+  <div class="card fade-in">
+    <div class="card-label"><i class="ti ti-table-share"></i> Registro Histórico de Auditoría</div>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Operador</th>
+            <th>Actividad Asignada</th>
+            <th>Duración</th>
+            <th>Mando Por</th>
+            <th>Estado Actual</th>
+            <th>Fecha y Hora</th>
+          </tr>
+        </thead>
+        <tbody id="log-table-body">
+          {% if log_global %}
+            {% for log in log_global[::-1] %}
+            <tr>
+              <td style="color: var(--neon); font-weight: bold;">{{ log.usuario }}</td>
+              <td>{{ log.tarea }}</td>
+              <td><i class="ti ti-hourglass-high" style="margin-right:3px;"></i>{{ log.tiempo_asignado }}</td>
+              <td style="color: #8fa8ff;">{{ log.enviado_por }}</td>
+              <td>
+                {% if log.estado == 'Desplegada' %}
+                  <span class="badge bg-desplegada">Desplegada</span>
+                {% elif log.estado == 'En ejecución' %}
+                  <span class="badge bg-ejecucion">En ejecución</span>
+                {% elif log.estado == 'Misión Cumplida' %}
+                  <span class="badge bg-cumplida">Cumplida</span>
+                {% elif log.estado == 'Finalizada con Retraso' %}
+                  <span class="badge bg-retraso">Con Retraso</span>
+                {% else %}
+                  <span class="badge bg-desplegada">{{ log.estado }}</span>
+                {% endif %}
+              </td>
+              <td style="color: #666; font-size: 11px;">{{ log.fecha }}</td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="6" style="text-align: center; color: var(--muted); padding: 30px;">
+                No se registran actividades en el historial global.
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -500,7 +566,6 @@ function typeConsole(txt){ document.getElementById('console-msg').textContent = 
 function interceptDeploy(e) {
   e.preventDefault();
   const destUser = document.getElementById('dest-select').value;
-  const tarea = document.getElementById('tarea-input').value.trim();
   
   const formData = new FormData(document.getElementById('deploy-form'));
   
@@ -525,9 +590,3 @@ function eliminarOperadorAjax(nombre) {
 </script>
 </body>
 </html>
-"""
-
-if __name__ == "__main__":
-    # Render asignará automáticamente el puerto mediante variable de entorno, si no usa el 5000
-    puerto = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=puerto)
