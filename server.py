@@ -96,7 +96,6 @@ def ack_tarea():
         if db[usuario]["datos"].get("id_envio") == id_tarea:
             db[usuario]["datos"]["_ui_consumida"] = True
             
-            # Buscamos en el log global para cambiar el estado de "Desplegada" a "En ejecución"
             for log in db.get("log_global", []):
                 if log.get("id_mision") == id_tarea:
                     log["estado"] = "En ejecución"
@@ -125,13 +124,11 @@ def reportar_progreso():
             
         db[usuario]["datos"]["rendimiento"]["total"] += 1
         
-        # Actualizamos el estado en el log histórico global
         for log in db.get("log_global", []):
             if log.get("id_mision") == id_tarea or (log.get("usuario") == usuario and log.get("estado") in ["Desplegada", "En ejecución"]):
                 log["estado"] = estado
                 break
         
-        # Reseteamos el estado en el servidor central
         db[usuario]["datos"]["tarea_actual"] = "Esperando mando..."
         db[usuario]["datos"]["tiempo_actual"] = 0
         db[usuario]["datos"]["_ui_consumida"] = True
@@ -400,8 +397,8 @@ HTML_PANEL = """
     .del-btn { font-size: 12px; color: rgba(255,79,79,0.5); cursor: pointer; border: 0.5px solid rgba(255,79,79,0.2); padding: 5px 8px; border-radius: 6px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
     .del-btn:hover { color: var(--red); background: rgba(255,79,79,0.1); border-color: var(--red); }
     
-    /* ── TABLA DE LOGS MEJORADA REQUERIDA ── */
-    .table-container { width: 100%; overflow-x: auto; margin-top: 5px; }
+    /* ── TABLA DE LOGS COMPLETA ── */
+    .table-container { width: 100%; overflow-x: auto; margin-top: 15px; border-top: 0.5px dashed var(--neon-border); padding-top: 15px; }
     table { width: 100%; border-collapse: collapse; font-family: 'Share Tech Mono', monospace; font-size: 12px; text-align: left; }
     th { padding: 10px; color: var(--neon); border-bottom: 1px solid var(--neon-border); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
     td { padding: 12px 10px; border-bottom: 0.5px solid var(--border); color: #ccc; vertical-align: middle; }
@@ -412,6 +409,10 @@ HTML_PANEL = """
     .bg-ejecucion { background: rgba(245,166,35,0.15); color: #fbbf24; border: 0.5px solid rgba(245,166,35,0.3); }
     .bg-cumplida { background: rgba(0,229,160,0.15); color: var(--neon); border: 0.5px solid var(--neon-border); }
     .bg-retraso { background: rgba(255,79,79,0.15); color: #f87171; border: 0.5px solid rgba(255,79,79,0.3); }
+
+    /* Estilo del contenedor del feed visual de arriba */
+    .log-scroll { max-height: 200px; overflow-y: auto; margin-bottom: 10px; }
+    .log-entry { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 0.5px solid var(--border); font-family: 'Share Tech Mono', monospace; font-size: 12px; }
 
     .launch-overlay { position: fixed; inset: 0; z-index: 8000; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; transition: opacity 0.25s; }
     .launch-overlay.active { opacity: 1; }
@@ -510,7 +511,26 @@ HTML_PANEL = """
   </div>
 
   <div class="card fade-in">
-    <div class="card-label"><i class="ti ti-table-share"></i> Registro Histórico de Auditoría</div>
+    <div class="card-label"><i class="ti ti-history"></i> Registro e Historial de Auditoría</div>
+    
+    <div class="log-scroll">
+      {% if log_global %}
+        {% for log in log_global[::-1] %}
+          <div class="log-entry">
+            <div>
+              <span style="color: var(--neon); font-weight: bold;">[{{ log.usuario }}]</span> 
+              <span>Misión: {{ log.tarea }}</span>
+            </div>
+            <div style="color: #666; font-size: 11px;">{{ log.fecha.split(' - ')[0] }}</div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div style="text-align: center; color: var(--muted); padding: 15px; font-family: 'Share Tech Mono', monospace; font-size: 12px;">
+          Esperando transmisiones...
+        </div>
+      {% endif %}
+    </div>
+
     <div class="table-container">
       <table>
         <thead>
@@ -519,7 +539,7 @@ HTML_PANEL = """
             <th>Actividad Asignada</th>
             <th>Duración</th>
             <th>Mando Por</th>
-            <th>Estado Actual</th>
+            <th>Estado</th>
             <th>Fecha y Hora</th>
           </tr>
         </thead>
@@ -549,14 +569,15 @@ HTML_PANEL = """
             {% endfor %}
           {% else %}
             <tr>
-              <td colspan="6" style="text-align: center; color: var(--muted); padding: 30px;">
-                No se registran actividades en el historial global.
+              <td colspan="6" style="text-align: center; color: var(--muted); padding: 20px;">
+                No hay registros crudos en la base de datos.
               </td>
             </tr>
           {% endif %}
         </tbody>
       </table>
     </div>
+
   </div>
 </div>
 
