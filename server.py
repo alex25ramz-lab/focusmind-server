@@ -343,138 +343,163 @@ HTML_PANEL = """
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8"><title>LUMINA OS — Panel Premium</title>
+  <meta charset="UTF-8"><title>LUMINA OS — Kinetic Core</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Syne:wght@300;400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --neon: #00e5a0; --neon-dim: rgba(0,229,160,0.06); --neon-border: rgba(0,229,160,0.25);
-      --bg: #040506; --card: rgba(13, 15, 18, 0.7); --border: rgba(255,255,255,0.05);
-      --red: #ff4f4f; --amber: #f5a623; --muted: #555; --blue: #3b82f6;
-      --glow-shadow: 0 0 20px rgba(0,229,160,0.25);
+      --neon: #00e5a0; --neon-dim: rgba(0,229,160,0.04); --neon-border: rgba(0,229,160,0.22);
+      --bg: #030405; --card: rgba(11, 13, 16, 0.75); --border: rgba(255,255,255,0.04);
+      --red: #ff4f4f; --amber: #f5a623; --muted: #4e5256; --blue: #3b82f6;
     }
     
-    /* Fondo animado dinámico */
-    body { background: var(--bg); color: #e0e0e0; font-family: 'Syne', sans-serif; padding: 20px 16px 60px; overflow-x: hidden; }
+    /* Fondo con Interferencia CRT Continua y Matriz de Red */
+    body { background: var(--bg); color: #e0e0e0; font-family: 'Syne', sans-serif; padding: 20px 16px 60px; overflow-x: hidden; position: relative; }
     body::before { 
       content: ''; position: fixed; inset: 0; 
       background-image: linear-gradient(rgba(0,229,160,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,160,0.015) 1px, transparent 1px); 
-      background-size: 35px 35px; pointer-events: none; z-index: 0;
-      animation: gridPulse 8s ease-in-out infinite alternate;
+      background-size: 40px 40px; pointer-events: none; z-index: 0;
+      animation: matrixShift 25s linear infinite;
     }
-    @keyframes gridPulse { 0% { opacity: 0.6; } 100% { opacity: 1; transform: scale(1.02); } }
+    body::after {
+      content: ''; position: fixed; inset: 0;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.2) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.04), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.04));
+      background-size: 100% 3px, 3px 100%; pointer-events: none; z-index: 9999; opacity: 0.7;
+    }
+    @keyframes matrixShift { from { background-position: 0 0; } to { background-position: 40px 80px; } }
 
     .wrap { position: relative; z-index: 1; max-width: 680px; margin: 0 auto; }
     .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
     
-    .session-info { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--neon); letter-spacing: 2px; text-transform: uppercase; font-family: 'Share Tech Mono', monospace; text-shadow: var(--glow-shadow); }
-    .dot-live { width: 7px; height: 7px; border-radius: 50%; background: var(--neon); flex-shrink: 0; animation: pulse 1.4s infinite; box-shadow: 0 0 10px var(--neon); }
-    @keyframes pulse { 0% { transform: scale(0.9); opacity:0.6; } 50% { transform: scale(1.2); opacity:1; } 100% { transform: scale(0.9); opacity:0.6; } }
+    .session-info { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--neon); letter-spacing: 2px; text-transform: uppercase; font-family: 'Share Tech Mono', monospace; text-shadow: 0 0 8px rgba(0,229,160,0.3); }
+    .dot-live { width: 8px; height: 8px; border-radius: 50%; background: var(--neon); flex-shrink: 0; animation: pulseRadar 1.2s cubic-bezier(0.24, 0, 0.38, 1) infinite; box-shadow: 0 0 8px var(--neon); }
+    @keyframes pulseRadar { 0% { transform: scale(0.8); opacity: 0.5; box-shadow: 0 0 0 0 rgba(0,229,160,0.7); } 70% { transform: scale(1.2); opacity: 1; box-shadow: 0 0 0 6px rgba(0,229,160,0); } 100% { transform: scale(0.8); opacity: 0.5; box-shadow: 0 0 0 0 rgba(0,229,160,0); } }
     
-    .logout-link { font-size: 10px; color: var(--red); text-decoration: none; letter-spacing: 1px; border: 0.5px solid rgba(255,79,79,0.2); padding: 5px 11px; border-radius: 5px; font-family: 'Share Tech Mono', monospace; transition: all 0.3s cubic-bezier(0.2,1,0.2,1); }
-    .logout-link:hover { background: rgba(255,79,79,0.12); border-color: var(--red); transform: translateY(-1px); box-shadow: 0 0 12px rgba(255,79,79,0.2); }
+    .logout-link { font-size: 10px; color: var(--red); text-decoration: none; letter-spacing: 1px; border: 0.5px solid rgba(255,79,79,0.2); padding: 5px 11px; border-radius: 5px; font-family: 'Share Tech Mono', monospace; transition: all 0.3s; }
+    .logout-link:hover { background: rgba(255,79,79,0.15); border-color: var(--red); box-shadow: 0 0 10px rgba(255,79,79,0.2); }
     
-    .logo h1 { font-family: 'Share Tech Mono', monospace; font-size: 32px; letter-spacing: 14px; color: var(--neon); font-weight: 400; text-align: center; text-shadow: 0 0 15px rgba(0,229,160,0.3); margin-left: 14px; }
+    /* Efecto Glitch continuo en el Título */
+    .logo h1 { font-family: 'Share Tech Mono', monospace; font-size: 34px; letter-spacing: 14px; color: var(--neon); font-weight: 400; text-align: center; position: relative; animation: glitchText 4s linear infinite; margin-left: 14px; }
+    @keyframes glitchText {
+      0%, 95%, 100% { text-shadow: 0 0 10px rgba(0,229,160,0.3); }
+      96% { text-shadow: -2px -2px #ff4f4f, 2px 2px #3b82f6; }
+      97% { text-shadow: 3px -1px #ff4f4f, -2px 3px var(--neon); }
+      99% { text-shadow: -1px 2px #3b82f6, 1px -2px #ff4f4f; }
+    }
     .logo .sub { font-size: 9px; color: rgba(0,229,160,0.35); letter-spacing: 4px; margin-top: 5px; text-transform: uppercase; text-align: center; margin-bottom: 22px; }
     
-    /* Consola con línea láser de escaneo */
-    .console { position: relative; background: var(--neon-dim); border-left: 3px solid var(--neon); padding: 14px 16px; border-radius: 0 10px 10px 0; margin-bottom: 24px; display: flex; align-items: flex-start; gap: 10px; overflow: hidden; box-shadow: inset 0 0 15px rgba(0,229,160,0.03); backdrop-filter: blur(4px); }
+    /* Consola Dinámica Inteligente */
+    .console { position: relative; background: var(--neon-dim); border-left: 3px solid var(--neon); padding: 14px 16px; border-radius: 0 10px 10px 0; margin-bottom: 24px; display: flex; align-items: flex-start; gap: 10px; overflow: hidden; backdrop-filter: blur(4px); }
     .console::after {
-      content: ''; position: absolute; left: 0; right: 0; height: 1px;
-      background: linear-gradient(90deg, transparent, var(--neon), transparent);
-      animation: scanline 2.5s linear infinite; opacity: 0.4;
+      content: ''; position: absolute; left: 0; right: 0; height: 100%; top: -100%;
+      background: linear-gradient(to bottom, transparent, rgba(0,229,160,0.06), transparent);
+      animation: laserScan 3s linear infinite;
     }
-    @keyframes scanline { 0% { top: -5%; } 100% { top: 105%; } }
-    .console .prompt { color: var(--neon); font-family: 'Share Tech Mono', monospace; font-size: 14px; text-shadow: 0 0 5px var(--neon); }
+    @keyframes laserScan { 0% { top: -100%; } 100% { top: 100%; } }
+    .console .prompt { color: var(--neon); font-family: 'Share Tech Mono', monospace; font-size: 14px; animation: flashPrompt 1s infinite alternate; }
+    @keyframes flashPrompt { from { opacity: 0.6; } to { opacity: 1; } }
     .console .msg { color: #baffeb; font-family: 'Share Tech Mono', monospace; font-size: 12px; line-height: 1.6; }
     .cursor { display: inline-block; width: 7px; height: 13px; background: var(--neon); margin-left: 3px; animation: blink 0.8s step-end infinite; box-shadow: 0 0 6px var(--neon); }
     
-    /* Tarjetas Modulares con Efecto Deslizante Estilo Cascada (Stagger) */
-    .card { background: var(--card); border: 0.5px solid var(--border); border-radius: 16px; padding: 22px 24px; margin-bottom: 18px; position: relative; overflow: hidden; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); transition: border-color 0.4s, box-shadow 0.4s, transform 0.4s; }
-    .card:hover { border-color: rgba(0,229,160,0.15); box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 15px rgba(0,229,160,0.02); transform: translateY(-2px); }
+    /* Tarjetas Modulares con Escaneo Perimetral */
+    .card { background: var(--card); border: 0.5px solid var(--border); border-radius: 16px; padding: 22px 24px; margin-bottom: 18px; position: relative; overflow: hidden; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+    .card::before {
+      content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(0,229,160,0.15), transparent);
+      transform: translateX(-100%); animation: borderWave 6s linear infinite;
+    }
+    @keyframes borderWave { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+    .card:hover { border-color: rgba(0,229,160,0.22); box-shadow: 0 12px 35px rgba(0,0,0,0.5), inset 0 0 15px rgba(0,229,160,0.02); transform: scale(1.005) translateY(-1px); }
     
-    /* Secuencia de retraso para efecto Cascada WOW */
-    .stagger-1 { animation: cardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.05s; }
-    .stagger-2 { animation: cardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.15s; }
-    .stagger-3 { animation: cardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.25s; }
-    .stagger-4 { animation: cardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.35s; }
-    @keyframes cardEnter { from { opacity: 0; transform: translateY(20px); filter: blur(4px); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }
+    /* Entrada Kinetic Cascade */
+    .stagger-1 { animation: cardEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.05s; }
+    .stagger-2 { animation: cardEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.12s; }
+    .stagger-3 { animation: cardEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.20s; }
+    .stagger-4 { animation: cardEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.28s; }
+    @keyframes cardEnter { from { opacity: 0; transform: translateY(15px); filter: blur(5px); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }
 
-    .card-label { font-size: 9px; color: var(--neon); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; font-family: 'Share Tech Mono', monospace; text-shadow: 0 0 8px rgba(0,229,160,0.2); }
+    .card-label { font-size: 9px; color: var(--neon); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; font-family: 'Share Tech Mono', monospace; }
     .card-label::after { content: ''; flex: 1; height: 0.5px; background: linear-gradient(90deg, var(--neon-border), transparent); }
+    
+    select, input[type="text"], input[type="number"] { background: #060708; border: 0.5px solid rgba(255,255,255,0.06); color: #e8e8e8; padding: 11px 14px; border-radius: 9px; font-family: 'Share Tech Mono', monospace; font-size: 13px; outline: none; width: 100%; transition: all 0.3s; }
+    select:focus, input:focus { border-color: var(--neon); box-shadow: 0 0 12px rgba(0,229,160,0.15); background: #090a0c; }
     
     .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
     .form-group { display: flex; flex-direction: column; gap: 6px; }
-    .form-group label { font-size: 9px; color: #666; letter-spacing: 2px; text-transform: uppercase; font-family: 'Share Tech Mono', monospace; }
-    
-    select, input[type="text"], input[type="number"] { background: #070809; border: 0.5px solid rgba(255,255,255,0.07); color: #e8e8e8; padding: 11px 14px; border-radius: 9px; font-family: 'Share Tech Mono', monospace; font-size: 13px; outline: none; width: 100%; transition: all 0.3s; }
-    select:focus, input:focus { border-color: var(--neon); box-shadow: 0 0 10px rgba(0,229,160,0.1); background: #0a0c0e; }
-    .full-field { margin-bottom: 16px; }
-    
-    /* Botones Interactivos de Alta Frecuencia */
-    .deploy-btn { width: 100%; padding: 14px; background: var(--neon); color: #03140b; font-family: 'Syne', sans-serif; font-weight: 600; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; border: none; border-radius: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; position: relative; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); overflow: hidden; box-shadow: 0 4px 15px rgba(0,229,160,0.2); }
-    .deploy-btn:hover { background: #00ffb3; transform: translateY(-1px); box-shadow: 0 6px 22px rgba(0,229,160,0.4); }
-    .deploy-btn:active { transform: translateY(1px); }
-    .deploy-btn::before { content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent); transition: left 0.5s ease; }
-    .deploy-btn:hover::before { left: 100%; }
+    .form-group label { font-size: 9px; color: #555; letter-spacing: 2px; text-transform: uppercase; font-family: 'Share Tech Mono', monospace; }
 
-    /* Estructuras del Monitor */
-    .op-row { display: grid; grid-template-columns: 40px 1fr auto auto; gap: 14px; align-items: center; padding: 12px 10px; border-bottom: 0.5px solid var(--border); border-radius: 8px; transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1); }
-    .op-row:hover { background: rgba(255,255,255,0.02); padding-left: 14px; }
-    .op-avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Share Tech Mono', monospace; font-size: 11px; font-weight: 600; transition: transform 0.3s; }
-    .op-row:hover .op-avatar { transform: scale(1.08) rotate(5deg); }
+    /* Botón Súper Cargado */
+    .deploy-btn { width: 100%; padding: 14px; background: var(--neon); color: #020c07; font-family: 'Syne', sans-serif; font-weight: 600; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; border: none; border-radius: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; position: relative; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); overflow: hidden; box-shadow: 0 4px 15px rgba(0,229,160,0.2); }
+    .deploy-btn:hover { background: #00ffb3; transform: translateY(-1px) scale(1.01); box-shadow: 0 8px 25px rgba(0,229,160,0.35); }
+    .deploy-btn::before { content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent); transform: skewX(-25deg); transition: none; animation: lightningSweeper 3.5s infinite linear; }
+    @keyframes lightningSweeper { 0% { left: -120%; } 30% { left: 150%; } 100% { left: 150%; } }
+
+    /* Componentes del Monitor con Radar Ondulante Continuo */
+    .op-row { display: grid; grid-template-columns: 40px 1fr auto auto; gap: 14px; align-items: center; padding: 12px 10px; border-bottom: 0.5px solid var(--border); border-radius: 8px; transition: all 0.35s cubic-bezier(0.2,1,0.2,1); }
+    .op-row:hover { background: rgba(0,229,160,0.02); padding-left: 15px; }
     
-    .av-neon { background: rgba(0,229,160,0.08); color: var(--neon); border: 0.5px solid var(--neon-border); box-shadow: 0 0 10px rgba(0,229,160,0.05); }
-    .av-blue { background: rgba(59,130,246,0.08); color: #8fa8ff; border: 0.5px solid rgba(59,130,246,0.2); }
-    .av-amber { background: rgba(245,166,35,0.08); color: var(--amber); border: 0.5px solid rgba(245,166,35,0.2); }
+    .avatar-wrapper { position: relative; width: 36px; height: 36px; }
+    .op-avatar { width: 100%; height: 100%; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Share Tech Mono', monospace; font-size: 11px; font-weight: 600; position: relative; z-index: 2; }
+    .av-neon { background: #05140f; color: var(--neon); border: 0.5px solid var(--neon-border); }
+    .av-blue { background: #050a14; color: #8fa8ff; border: 0.5px solid rgba(59,130,246,0.2); }
     
-    .op-name { font-size: 13px; color: #eee; font-weight: 500; letter-spacing: 0.5px; }
-    .op-task { font-size: 10px; color: var(--muted); margin-top: 3px; display: flex; align-items: center; gap: 6px; font-family: 'Share Tech Mono', monospace; }
+    /* Ondas de radar infinitas para operadores activos */
+    .row-active-pulse::before {
+      content: ''; position: absolute; inset: 0; border-radius: 50%;
+      box-shadow: 0 0 0 2px var(--neon); animation: radarRing 2s infinite linear; z-index: 1;
+    }
+    @keyframes radarRing { 0% { transform: scale(0.95); opacity: 0.8; } 100% { transform: scale(1.4); opacity: 0; } }
+
+    .op-name { font-size: 13px; color: #eee; font-weight: 500; }
+    .op-task { font-size: 10px; color: #666; margin-top: 3px; display: flex; align-items: center; gap: 6px; font-family: 'Share Tech Mono', monospace; }
     
-    .sdot { width: 6px; height: 6px; border-radius: 50%; transition: all 0.3s; }
-    .sdot-active { background: var(--neon); box-shadow: 0 0 8px var(--neon); animation: pulse 1s infinite; }
-    .sdot-idle { background: #333; }
+    .sdot { width: 6px; height: 6px; border-radius: 50%; }
+    .sdot-active { background: var(--neon); box-shadow: 0 0 10px var(--neon); animation: blink 0.6s step-end infinite; }
+    .sdot-idle { background: #2a2c2e; }
     
     .op-via { font-size: 9px; color: #444; margin-top: 2px; font-family: 'Share Tech Mono', monospace; }
-    .op-stats { display: flex; gap: 10px; }
-    .stat-chip { font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 3px; font-family: 'Share Tech Mono', monospace; padding: 3px 6px; background: rgba(255,255,255,0.02); border-radius: 4px; }
-    .stat-ok { color: var(--neon); }
-    .stat-bad { color: var(--red); }
+    .stat-chip { font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 3px; font-family: 'Share Tech Mono', monospace; padding: 3px 6px; background: rgba(255,255,255,0.01); border-radius: 4px; }
+    .stat-ok { color: var(--neon); } .stat-bad { color: var(--red); }
     
-    .del-btn { font-size: 12px; color: rgba(255,79,79,0.4); cursor: pointer; border: 0.5px solid rgba(255,79,79,0.15); padding: 5px 8px; border-radius: 6px; transition: all 0.3s; display: flex; align-items: center; justify-content: center; }
-    .del-btn:hover { color: var(--red); background: rgba(255,79,79,0.12); border-color: var(--red); transform: scale(1.05); box-shadow: 0 0 10px rgba(255,79,79,0.15); }
+    .del-btn { font-size: 12px; color: rgba(255,79,79,0.4); cursor: pointer; border: 0.5px solid rgba(255,79,79,0.15); padding: 5px 8px; border-radius: 6px; transition: all 0.25s; display: flex; align-items: center; justify-content: center; }
+    .del-btn:hover { color: var(--red); background: rgba(255,79,79,0.12); border-color: var(--red); transform: rotate(90deg); }
     
-    .log-scroll { max-height: 150px; overflow-y: auto; scroll-behavior: smooth; }
-    .log-entry { display: flex; justify-content: space-between; align-items: center; padding: 10px 6px; border-bottom: 0.5px solid var(--border); font-family: 'Share Tech Mono', monospace; font-size: 12px; transition: background 0.2s; }
-    .log-entry:hover { background: rgba(0,229,160,0.02); }
+    .log-scroll { max-height: 140px; overflow-y: auto; }
+    .log-entry { display: flex; justify-content: space-between; align-items: center; padding: 10px 6px; border-bottom: 0.5px solid var(--border); font-family: 'Share Tech Mono', monospace; font-size: 12px; }
 
-    /* Tabla Estructurada Detallada */
+    /* Tabla de Registros Animada en Vivo */
     .table-container { width: 100%; overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; font-family: 'Share Tech Mono', monospace; font-size: 12px; text-align: left; }
-    th { padding: 12px 10px; color: var(--neon); border-bottom: 1px solid var(--neon-border); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
-    td { padding: 12px 10px; border-bottom: 0.5px solid var(--border); color: #ccc; transition: color 0.2s; }
-    tr:hover td { color: #fff; }
-    tr { transition: background 0.25s; }
+    table { width: 100%; border-collapse: collapse; font-family: 'Share Tech Mono', monospace; font-size: 12px; }
+    th { padding: 12px 10px; color: var(--neon); border-bottom: 1px solid var(--neon-border); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; text-align: left; }
+    td { padding: 13px 10px; border-bottom: 0.5px solid var(--border); color: #ccc; }
+    tr { transition: background 0.2s; }
     tr:hover { background: rgba(255,255,255,0.015); }
     
-    .badge { padding: 3px 8px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase; display: inline-block; letter-spacing: 0.5px; }
-    .badge-glow { animation: badgePulse 2s infinite alternate; }
-    @keyframes badgePulse { from { filter: drop-shadow(0 0 2px cubic-bezier(0.2,1,0.2,1)); } to { filter: drop-shadow(0 0 6px cubic-bezier(0.2,1,0.2,1)); } }
-    
+    /* Barras de Estado en Carga Infinita */
+    .badge { padding: 3px 8px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase; position: relative; overflow: hidden; display: inline-block; }
     .bg-desplegada { background: rgba(59,130,246,0.12); color: #60a5fa; border: 0.5px solid rgba(59,130,246,0.25); }
-    .bg-ejecucion { background: rgba(245,166,35,0.12); color: #fbbf24; border: 0.5px solid rgba(245,166,35,0.25); }
-    .bg-cumplida { background: rgba(0,229,160,0.12); color: var(--neon); border: 0.5px solid var(--neon-border); }
+    
+    .bg-ejecucion { background: rgba(245,166,35,0.12); color: #fbbf24; border: 0.5px solid rgba(245,166,35,0.25); position: relative; }
+    /* Animación de líneas oblicuas moviéndose solas para simular procesamiento activo */
+    .bg-ejecucion::before {
+      content: ''; position: absolute; inset: 0; opacity: 0.15;
+      background-image: linear-gradient(45deg, #fbbf24 25%, transparent 25%, transparent 50%, #fbbf24 50%, #fbbf24 75%, transparent 75%, transparent);
+      background-size: 10px 10px; animation: progressStripes 1s linear infinite;
+    }
+    @keyframes progressStripes { from { background-position: 0 0; } to { background-position: 10px 0; } }
+    
+    .bg-cumplida { background: rgba(0,229,160,0.1); color: var(--neon); border: 0.5px solid var(--neon-border); box-shadow: 0 0 8px rgba(0,229,160,0.15); }
     .bg-retraso { background: rgba(255,79,79,0.12); color: #f87171; border: 0.5px solid rgba(255,79,79,0.25); }
 
-    /* Overlay Cinematográfico de Lanzamiento WOW */
-    .launch-overlay { position: fixed; inset: 0; z-index: 8000; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; background: rgba(4,5,6,0.0); backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px); transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
-    .launch-overlay.active { opacity: 1; pointer-events: auto; background: rgba(4,5,6,0.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-    .launch-box { background: #050b08; border: 1px solid var(--neon); border-radius: 20px; padding: 35px 50px; text-align: center; font-family: 'Share Tech Mono', monospace; transform: scale(0.7) cubic-bezier(0.34,1.56,0.64,1); transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.5s; box-shadow: 0 0 0 rgba(0,229,160,0); }
-    .launch-overlay.active .launch-box { transform: scale(1); box-shadow: 0 15px 50px rgba(0,0,0,0.6), 0 0 30px rgba(0,229,160,0.25); }
-    .launch-title { font-size: 10px; color: rgba(0,229,160,0.4); letter-spacing: 5px; margin-bottom: 12px; }
-    .launch-name { font-size: 26px; color: var(--neon); letter-spacing: 4px; text-transform: uppercase; text-shadow: 0 0 12px var(--neon); font-weight: bold; }
+    /* Overlay Cuántico de Lanzamiento */
+    .launch-overlay { position: fixed; inset: 0; z-index: 8000; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px); transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+    .launch-overlay.active { opacity: 1; pointer-events: auto; background: rgba(3,4,5,0.65); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+    .launch-box { background: #030806; border: 1px solid var(--neon); border-radius: 20px; padding: 35px 50px; text-align: center; font-family: 'Share Tech Mono', monospace; transform: scale(0.6); transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 0 40px rgba(0,229,160,0.3); }
+    .launch-overlay.active .launch-box { transform: scale(1); }
+    .launch-title { font-size: 10px; color: rgba(0,229,160,0.4); letter-spacing: 5px; margin-bottom: 12px; animation: blink 0.5s step-end infinite; }
+    .launch-name { font-size: 28px; color: var(--neon); letter-spacing: 4px; text-shadow: 0 0 15px var(--neon); font-weight: bold; }
     
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
   </style>
@@ -483,7 +508,7 @@ HTML_PANEL = """
 
 <div class="launch-overlay" id="launch-overlay">
   <div class="launch-box">
-    <div class="launch-title"><i class="ti ti-wifi" class="animation: pulse 1s infinite"></i> TRANSMITIENDO COMPONENTE QUANTUM...</div>
+    <div class="launch-title">&gt;&gt; RED DE DATOS INTERMITENTE: ENVIANDO MANDO_</div>
     <div class="launch-name" id="launch-dest">—</div>
   </div>
 </div>
@@ -491,8 +516,9 @@ HTML_PANEL = """
 <div class="wrap">
   <div class="top-bar">
     <div class="session-info"><span class="dot-live"></span>RED EN LA NUBE: {{ usuario }}</div>
-    <a href="/logout" class="logout-link">[ DESCONECTAR NODO ]</a>
+    <a href="/logout" class="logout-link">[ APAGAR NODO ]</a>
   </div>
+  
   <div class="logo"><h1>LUMINA OS</h1><div class="sub">Consola de Misiones Globales</div></div>
   
   <div class="console">
@@ -531,20 +557,23 @@ HTML_PANEL = """
   <div class="card stagger-2">
     <div class="card-label"><i class="ti ti-radar"></i> Monitor de Operadores</div>
     <div id="operator-rows-container">
-      {% set avatares = ['av-neon','av-blue','av-amber'] %}
+      {% set avatares = ['av-neon','av-blue'] %}
       {% for op_name, op_info in equipo.items() if op_name != 'log_global' %}
+      {% set esta_activo = op_info.datos.tarea_actual != 'Esperando mando...' and not op_info.datos._ui_consumida %}
       <div class="op-row" id="row-{{ op_name }}">
-        <div class="op-avatar {{ avatares[loop.index0 % 3] }}">{{ op_name[:2].upper() }}</div>
+        <div class="avatar-wrapper {% if esta_activo %}row-active-pulse{% endif %}">
+          <div class="op-avatar {{ avatares[loop.index0 % 2] }}">{{ op_name[:2].upper() }}</div>
+        </div>
         <div>
           <div class="op-name">{{ op_name }}</div>
           <div class="op-task">
-            {% if op_info.datos.tarea_actual == 'Esperando mando...' or op_info.datos._ui_consumida %}
+            {% if not esta_activo %}
               <span class="sdot sdot-idle"></span><span>Esperando mando...</span>
             {% else %}
-              <span class="sdot sdot-active"></span><span>{{ op_info.datos.tarea_actual }}</span>
+              <span class="sdot sdot-active"></span><span style="color:#fff;">{{ op_info.datos.tarea_actual }}</span>
             {% endif %}
           </div>
-          <div class="op-via">Enviado por: {{ op_info.datos.enviado_por }}</div>
+          <div class="op-via">Mando: {{ op_info.datos.enviado_por }}</div>
         </div>
         <div class="op-stats">
           <span class="stat-chip stat-ok"><i class="ti ti-check"></i>{{ op_info.datos.rendimiento.exitos }}</span>
@@ -572,7 +601,7 @@ HTML_PANEL = """
               <span style="color: var(--neon); font-weight: bold;">[{{ log.usuario }}]</span> 
               <span>Misión: {{ log.tarea }}</span>
             </div>
-            <div style="color: #666; font-size: 11px;">{{ log.fecha.split(' - ')[0] }}</div>
+            <div style="color: #555; font-size: 11px;">{{ log.fecha.split(' - ')[0] }}</div>
           </div>
         {% endfor %}
       {% else %}
@@ -609,7 +638,7 @@ HTML_PANEL = """
                 {% if log.estado == 'Desplegada' %}
                   <span class="badge bg-desplegada">Desplegada</span>
                 {% elif log.estado == 'En ejecución' %}
-                  <span class="badge bg-ejecucion badge-glow">En ejecución</span>
+                  <span class="badge bg-ejecucion">En ejecución</span>
                 {% elif log.estado == 'Misión Cumplida' %}
                   <span class="badge bg-cumplida">Cumplida</span>
                 {% elif log.estado == 'Finalizada con Retraso' %}
@@ -618,70 +647,4 @@ HTML_PANEL = """
                   <span class="badge bg-desplegada">{{ log.estado }}</span>
                 {% endif %}
               </td>
-              <td style="color: #666; font-size: 11px;">{{ log.fecha }}</td>
-            </tr>
-            {% endfor %}
-          {% else %}
-            <tr>
-              <td colspan="6" style="text-align: center; color: var(--muted); padding: 30px;">
-                Ninguna actividad registrada en la base de datos central.
-              </td>
-            </tr>
-          {% endif %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-</div>
-
-<script>
-function typeConsole(txt){ document.getElementById('console-msg').textContent = txt; }
-
-function interceptDeploy(e) {
-  e.preventDefault();
-  const destUser = document.getElementById('dest-select').value;
-  const formData = new FormData(document.getElementById('deploy-form'));
-  
-  // Pequeña animación reactiva en el propio botón al hacer click
-  const btn = document.getElementById('deploy-btn');
-  btn.style.transform = "scale(0.96)";
-  
-  fetch('/enviar_tarea_web', { method: 'POST', body: formData })
-  .then(res => res.json())
-  .then(data => {
-    if(data.success) {
-      const ov = document.getElementById('launch-overlay');
-      document.getElementById('launch-dest').textContent = destUser.toUpperCase();
-      ov.classList.add('active'); 
-      
-      // Espera cinematográfica antes de actualizar la UI completa
-      setTimeout(() => { 
-        ov.classList.remove('active'); 
-        location.reload(); 
-      }, 1400);
-    }
-  });
-}
-
-function eliminarOperadorAjax(nombre) {
-  if (!confirm('¿Desconectar frecuencia de '+nombre+' de Render?')) return;
-  
-  const row = document.getElementById('row-'+nombre);
-  if (row) {
-    // Animación de salida física fluida WOW antes del borrado duro
-    row.style.transition = 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1)';
-    row.style.opacity = '0';
-    row.style.transform = 'translateX(40px) scale(0.95)';
-    row.style.filter = 'blur(4px)';
-  }
-  
-  setTimeout(() => {
-    fetch('/eliminar_usuario_ajax/'+nombre, { method: 'POST' })
-    .then(r => r.json())
-    .then(data => { if(data.success) location.reload(); });
-  }, 450);
-}
-</script>
-</body>
-</html>
+              <td style="color: #555; font-size: 11px;">{{ log.fecha }}</td>
