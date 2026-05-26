@@ -431,17 +431,17 @@ HTML_PANEL = """
     .form-group { display: flex; flex-direction: column; gap: 6px; }
     .form-group label { font-size: 9px; color: #555; letter-spacing: 2px; text-transform: uppercase; font-family: 'Share Tech Mono', monospace; }
 
-    /* Botón Súper Cargado */
+    /* Botones de Comando */
     .deploy-btn, .add-btn { width: 100%; padding: 14px; background: var(--neon); color: #020c07; font-family: 'Syne', sans-serif; font-weight: 600; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; border: none; border-radius: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; position: relative; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); overflow: hidden; box-shadow: 0 4px 15px rgba(0,229,160,0.2); }
     .deploy-btn:hover, .add-btn:hover { background: #00ffb3; transform: translateY(-1px) scale(1.01); box-shadow: 0 8px 25px rgba(0,229,160,0.35); }
     .deploy-btn::before, .add-btn::before { content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent); transform: skewX(-25deg); animation: lightningSweeper 3.5s infinite linear; }
     @keyframes lightningSweeper { 0% { left: -120%; } 30% { left: 150%; } 100% { left: 150%; } }
 
-    .add-btn { background: transparent; border: 0.5px solid var(--neon-border); color: var(--neon); box-shadow: none; padding: 11px; }
+    .add-btn { background: transparent; border: 0.5px solid var(--neon-border); color: var(--neon); box-shadow: none; padding: 11px; width: auto; min-width: 150px; }
     .add-btn:hover { background: rgba(0,229,160,0.08); color: #fff; border-color: var(--neon); }
 
     /* Componentes del Monitor con Radar Ondulante Continuo */
-    .op-row { display: grid; grid-template-columns: 40px 1fr auto auto; gap: 14px; align-items: center; padding: 12px 10px; border-bottom: 0.5px solid var(--border); border-radius: 8px; transition: all 0.35s cubic-bezier(0.2,1,0.2,1); }
+    .op-row { display: grid; grid-template-columns: 40px 1fr auto auto; gap: 14px; align-items: center; padding: 12px 10px; border-bottom: 0.5px solid var(--border); border-radius: 8px; transition: all 0.35s cubic-bezier(0.2,1,0.2,1); position: relative; }
     .op-row:hover { background: rgba(0,229,160,0.02); padding-left: 15px; }
     
     .avatar-wrapper { position: relative; width: 36px; height: 36px; }
@@ -451,10 +451,10 @@ HTML_PANEL = """
     
     /* Ondas de radar infinitas para operadores activos */
     .row-active-pulse::before {
-      content: ''; position: absolute; inset: 0; border-radius: 50%;
-      box-shadow: 0 0 0 2px var(--neon); animation: radarRing 2s infinite linear; z-index: 1;
+      content: ''; position: absolute; inset: -4px; border-radius: 50%;
+      box-shadow: 0 0 0 1.5px var(--neon); animation: radarRing 2s infinite cubic-bezier(0.16, 1, 0.3, 1); z-index: 1;
     }
-    @keyframes radarRing { 0% { transform: scale(0.95); opacity: 0.8; } 100% { transform: scale(1.4); opacity: 0; } }
+    @keyframes radarRing { 0% { transform: scale(0.85); opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
 
     .op-name { font-size: 13px; color: #eee; font-weight: 500; }
     .op-task { font-size: 10px; color: #666; margin-top: 3px; display: flex; align-items: center; gap: 6px; font-family: 'Share Tech Mono', monospace; }
@@ -511,7 +511,7 @@ HTML_PANEL = """
 
 <div class="launch-overlay" id="launch-overlay">
   <div class="launch-box">
-    <div class="launch-title">&gt;&gt; RED DE DATOS INTERMITENTE: PROCESANDO CAMBIO EN EL PANEL_</div>
+    <div class="launch-title">&gt;&gt; CONEXIÓN CENTRAL: CONFIGURANDO FRECUENCIA_</div>
     <div class="launch-name" id="launch-dest">—</div>
   </div>
 </div>
@@ -560,9 +560,9 @@ HTML_PANEL = """
   <div class="card stagger-2">
     <div class="card-label"><i class="ti ti-user-plus"></i> Gestión y Control de Frecuencias</div>
     <form id="add-user-form" onsubmit="agregarOperadorAjax(event)">
-      <div class="form-row" style="grid-template-columns: 1fr auto; items: center; gap: 10px;">
+      <div class="form-row" style="grid-template-columns: 1fr auto; align-items: center; gap: 12px; margin-bottom: 0;">
         <div class="form-group">
-          <input type="text" name="nuevo_usuario" id="new-user-input" placeholder="Nombre o ID del nuevo operador (Ej: operador2)..." required>
+          <input type="text" name="nuevo_usuario" id="new-user-input" placeholder="ID del nuevo operador (Ej: operador2)..." required>
         </div>
         <button type="submit" class="add-btn">
           <i class="ti ti-plus"></i> Enlazar Nodo
@@ -682,8 +682,6 @@ HTML_PANEL = """
 </div>
 
 <script>
-function typeConsole(txt){ document.getElementById('console-msg').textContent = txt; }
-
 function interceptDeploy(e) {
   e.preventDefault();
   const destUser = document.getElementById('dest-select').value;
@@ -715,8 +713,9 @@ function agregarOperadorAjax(e) {
   .then(data => {
     if(data.success) {
       const ov = document.getElementById('launch-overlay');
-      document.getElementById('launch-dest').textContent = "AÑADIENDO NODO: " + nombre.toUpperCase();
+      document.getElementById('launch-dest').textContent = "VÍNCULO COMPLETADO: " + nombre.toUpperCase();
       ov.classList.add('active'); 
+      // FIX: Asegura refrescar la ventana tras guardar con éxito para reconstruir el selector y la lista
       setTimeout(() => { ov.classList.remove('active'); location.reload(); }, 1100);
     } else {
       alert("Error del sistema central: " + data.error);
