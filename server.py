@@ -223,7 +223,7 @@ def enviar_tarea_web():
             "id_mision": id_mision_generada,
             "usuario": destinatario,
             "tarea": tarea,
-            "tiempo_asignado": f"{mins} min",
+            "tiempo_assigned": f"{mins} min",
             "enviado_por": session["usuario"],
             "estado": "Desplegada",
             "fecha": datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
@@ -397,10 +397,14 @@ HTML_PANEL = """
     .del-btn { font-size: 12px; color: rgba(255,79,79,0.5); cursor: pointer; border: 0.5px solid rgba(255,79,79,0.2); padding: 5px 8px; border-radius: 6px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
     .del-btn:hover { color: var(--red); background: rgba(255,79,79,0.1); border-color: var(--red); }
     
-    /* ── TABLA DE LOGS COMPLETA ── */
-    .table-container { width: 100%; overflow-x: auto; margin-top: 15px; border-top: 0.5px dashed var(--neon-border); padding-top: 15px; }
+    /* Estilos del Feed de Eventos Compacto */
+    .log-scroll { max-height: 160px; overflow-y: auto; }
+    .log-entry { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 0.5px solid var(--border); font-family: 'Share Tech Mono', monospace; font-size: 12px; }
+
+    /* ── ESTILOS EXCLUSIVOS DE LA NUEVA TABLA DE REGISTROS ── */
+    .table-container { width: 100%; overflow-x: auto; margin-top: 5px; }
     table { width: 100%; border-collapse: collapse; font-family: 'Share Tech Mono', monospace; font-size: 12px; text-align: left; }
-    th { padding: 10px; color: var(--neon); border-bottom: 1px solid var(--neon-border); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+    th { padding: 11px 10px; color: var(--neon); border-bottom: 1px solid var(--neon-border); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
     td { padding: 12px 10px; border-bottom: 0.5px solid var(--border); color: #ccc; vertical-align: middle; }
     tr:hover { background: rgba(255,255,255,0.02); }
     
@@ -409,10 +413,6 @@ HTML_PANEL = """
     .bg-ejecucion { background: rgba(245,166,35,0.15); color: #fbbf24; border: 0.5px solid rgba(245,166,35,0.3); }
     .bg-cumplida { background: rgba(0,229,160,0.15); color: var(--neon); border: 0.5px solid var(--neon-border); }
     .bg-retraso { background: rgba(255,79,79,0.15); color: #f87171; border: 0.5px solid rgba(255,79,79,0.3); }
-
-    /* Estilo del contenedor del feed visual de arriba */
-    .log-scroll { max-height: 200px; overflow-y: auto; margin-bottom: 10px; }
-    .log-entry { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 0.5px solid var(--border); font-family: 'Share Tech Mono', monospace; font-size: 12px; }
 
     .launch-overlay { position: fixed; inset: 0; z-index: 8000; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; transition: opacity 0.25s; }
     .launch-overlay.active { opacity: 1; }
@@ -511,8 +511,7 @@ HTML_PANEL = """
   </div>
 
   <div class="card fade-in">
-    <div class="card-label"><i class="ti ti-history"></i> Registro e Historial de Auditoría</div>
-    
+    <div class="card-label"><i class="ti ti-history"></i> Transmisiones Recientes</div>
     <div class="log-scroll">
       {% if log_global %}
         {% for log in log_global[::-1] %}
@@ -530,17 +529,20 @@ HTML_PANEL = """
         </div>
       {% endif %}
     </div>
+  </div>
 
+  <div class="card fade-in">
+    <div class="card-label"><i class="ti ti-table-share"></i> Tabla de Registro de Actividades (Auditoría Global)</div>
     <div class="table-container">
       <table>
         <thead>
           <tr>
-            <th>Operador</th>
-            <th>Actividad Asignada</th>
+            <th>Operador (A Quién)</th>
+            <th>Actividad Enviada</th>
             <th>Duración</th>
-            <th>Mando Por</th>
-            <th>Estado</th>
-            <th>Fecha y Hora</th>
+            <th>Mando Por (Quién)</th>
+            <th>Estado de Misión</th>
+            <th>Fecha / Hora Exacta</th>
           </tr>
         </thead>
         <tbody id="log-table-body">
@@ -549,7 +551,7 @@ HTML_PANEL = """
             <tr>
               <td style="color: var(--neon); font-weight: bold;">{{ log.usuario }}</td>
               <td>{{ log.tarea }}</td>
-              <td><i class="ti ti-hourglass-high" style="margin-right:3px;"></i>{{ log.tiempo_asignado }}</td>
+              <td><i class="ti ti-hourglass-high" style="margin-right:3px;"></i>{{ log.tiempo_assigned if log.tiempo_assigned else log.tiempo_asignado }}</td>
               <td style="color: #8fa8ff;">{{ log.enviado_por }}</td>
               <td>
                 {% if log.estado == 'Desplegada' %}
@@ -569,16 +571,16 @@ HTML_PANEL = """
             {% endfor %}
           {% else %}
             <tr>
-              <td colspan="6" style="text-align: center; color: var(--muted); padding: 20px;">
-                No hay registros crudos en la base de datos.
+              <td colspan="6" style="text-align: center; color: var(--muted); padding: 30px;">
+                Ninguna actividad registrada en la base de datos central.
               </td>
             </tr>
           {% endif %}
         </tbody>
       </table>
     </div>
-
   </div>
+
 </div>
 
 <script>
