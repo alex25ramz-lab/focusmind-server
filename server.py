@@ -53,7 +53,8 @@ FRASES_LUMINA = [
     "Transmisión confirmada. Operador en modo activo."
 ]
 
-# ── ENLACE DIRECTO PARA LOGIC.PY (GET_DATA CON FORMATO ORIGINAL) ──
+# ── ENDPOINTS DE COMUNICACIÓN CON LOGIC.PY ──
+
 @app.route("/get_data", methods=["GET"])
 def get_data():
     usuario = request.args.get("user", "").strip()
@@ -70,7 +71,7 @@ def get_data():
         })
     return jsonify({"tarea": "Esperando mando...", "tiempo": 0, "id": 0})
 
-# ── ENLACE DIRECTO PARA LOGIC.PY (ACK TAREA ORIGINAL) ──
+
 @app.route("/ack_tarea", methods=["POST"])
 def ack_tarea():
     data = request.get_json() or {}
@@ -81,41 +82,42 @@ def ack_tarea():
         
     db = cargar_db()
     if usuario in db:
-        # Aquí puedes resetear el estado o mantenerlo según tu flujo original
         guardar_db(db)
         return jsonify({"success": True})
     return jsonify({"success": False, "error": "Usuario no encontrado"}), 404
 
-# ── ENLACE DIRECTO PARA LOGIC.PY (REPORTAR PROGRESO ORIGINAL) ──
+
 @app.route("/reportar_progreso", methods=["POST"])
 def reportar_progreso():
     data = request.get_json() or {}
     usuario = data.get("user")
     estado = data.get("estado")
-    tarea_nombre = data.get("tarea_nombre")
     
     if not usuario:
-        return jsonify({"success": False, "error": "Faltan datos"}), 400
+        return jsonify({"success": False, "error": "Faltan datos de usuario"}), 400
         
     db = cargar_db()
     if usuario in db:
-        # Sumar al rendimiento según el estado enviado por la interfaz de la laptop
+        # Sumamos las estadísticas en el perfil del operador basado en el estado finalizado
         if estado == "Misión Cumplida":
             db[usuario]["datos"]["rendimiento"]["exitos"] += 1
         elif estado == "Finalizada con Retraso":
             db[usuario]["datos"]["rendimiento"]["retrasos"] += 1
             
         db[usuario]["datos"]["rendimiento"]["total"] += 1
-        # Devolver a estado de espera
+        
+        # Una vez guardado el estado, regresamos la interfaz a reposo
         db[usuario]["datos"]["tarea_actual"] = "Esperando mando..."
         db[usuario]["datos"]["tiempo_actual"] = 0
         
         guardar_db(db)
         return jsonify({"success": True})
         
-    return jsonify({"success": False, "error": "Operador no mapeado"}), 404
+    return jsonify({"success": False, "error": "Operador no registrado"}), 404
 
-# ── RUTAS DE LA INTERFAZ WEB ──
+
+# ── INTERFAZ WEB ROUTING ──
+
 @app.route("/", methods=["GET", "POST"])
 def login():
     if "usuario" in session:
@@ -144,6 +146,7 @@ def login():
             
     return render_template_string(HTML_AUTH, error=error)
 
+
 @app.route("/panel")
 def panel():
     if "usuario" not in session:
@@ -169,17 +172,18 @@ def panel():
         log_global=log_global
     )
 
+
 @app.route("/enviar_tarea_web", methods=["POST"])
 def enviar_tarea_web():
     if "usuario" not in session:
-        return jsonify({"success": False, "error": "Sesión no válida"}), 403
+        return jsonify({"success": False, "error": "Sesión caducada"}), 403
         
     destinatario = request.form.get("destinatario")
     mins = request.form.get("mins")
     tarea = request.form.get("tarea")
     
     if not destinatario or not mins or not tarea:
-        return jsonify({"success": False, "error": "Datos incompletos"}), 400
+        return jsonify({"success": False, "error": "Campos incompletos"}), 400
         
     db = cargar_db()
     if destinatario in db and destinatario != "log_global":
@@ -203,20 +207,21 @@ def enviar_tarea_web():
         guardar_db(db)
         return jsonify({"success": True, "frase": db[destinatario]["datos"]["ultimo_msj"]})
         
-    return jsonify({"success": False, "error": "Destinatario no encontrado"}), 400
+    return jsonify({"success": False, "error": "El destino no existe"}), 400
+
 
 @app.route("/agregar_usuario_ajax", methods=["POST"])
 def agregar_usuario_ajax():
     if "usuario" not in session:
-        return jsonify({"success": False, "error": "Sesión no válida"}), 403
+        return jsonify({"success": False, "error": "Sesión caducada"}), 403
     
     nuevo_op = request.form.get("nuevo_usuario", "").strip()
     if not nuevo_op or nuevo_op == "log_global":
-        return jsonify({"success": False, "error": "ID de operador inválido"}), 400
+        return jsonify({"success": False, "error": "ID Inválido"}), 400
         
     db = cargar_db()
     if nuevo_op in db:
-        return jsonify({"success": False, "error": "El operador ya existe"}), 400
+        return jsonify({"success": False, "error": "El operador ya se encuentra registrado"}), 400
         
     db[nuevo_op] = {"password": "", "datos": inicializar_perfil(nuevo_op)}
     guardar_db(db)
@@ -225,31 +230,35 @@ def agregar_usuario_ajax():
         "success": True, 
         "nombre": nuevo_op,
         "iniciales": nuevo_op[:2].upper(),
-        "frase": f"Frecuencia vinculada. {nuevo_op} añadido a la red."
+        "frase": f"Enlace establecido. {nuevo_op} se ha unido a la red Lumina."
     })
+
 
 @app.route("/eliminar_usuario_ajax/<nombre>", methods=["POST"])
 def eliminar_usuario_ajax(nombre):
     if "usuario" not in session:
-        return jsonify({"success": False, "error": "Sesión no válida"}), 403
+        return jsonify({"success": False, "error": "Sesión caducada"}), 403
     
     if nombre == "operador1":
-        return jsonify({"success": False, "error": "Núcleo maestro protegido"}), 400
+        return jsonify({"success": False, "error": "No se puede dar de baja al nodo troncal maestro"}), 400
         
     db = cargar_db()
     if nombre in db:
         del db[nombre]
         guardar_db(db)
-        return jsonify({"success": True, "frase": f"Enlace interrumpido. {nombre} fuera de línea."})
+        return jsonify({"success": True, "frase": f"Enlace cerrado. {nombre} desconectado de la red."})
         
-    return jsonify({"success": False, "error": "Operador no encontrado"}), 404
+    return jsonify({"success": False, "error": "Operador no localizado"}), 404
+
 
 @app.route("/logout")
 def logout():
     session.pop("usuario", None)
     return redirect(url_for("login"))
 
-# Templates HTML integrados de Lumina
+
+# ── ESTRUCTURAS VISUALES HTML FRONTEND ──
+
 HTML_AUTH = """
 <!DOCTYPE html>
 <html lang="es">
