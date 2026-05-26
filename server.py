@@ -17,7 +17,8 @@ def inicializar_perfil(nombre):
         "enviado_por": "Sistema",
         "historial": [],
         "rendimiento": {"exitos": 0, "retrasos": 0, "total": 0},
-        "ultimo_msj": f"Sistemas LUMINA inicializados para {nombre}."
+        "ultimo_msj": f"Sistemas LUMINA inicializados para {nombre}.",
+        "_ui_consumida": True   # ← FIX: inicia en True para no entregar tarea vacía
     }
 
 def cargar_db():
@@ -115,7 +116,7 @@ def enviar_tarea_web():
         db[destinatario]["datos"]["enviado_por"]    = session["usuario"]
         db[destinatario]["datos"]["ultimo_msj"]     = random.choice(FRASES_LUMINA)
         db[destinatario]["datos"]["id_envio"]       = db[destinatario]["datos"].get("id_envio", 0) + 1
-        db[destinatario]["datos"]["_ui_consumida"]  = False   # ui.py puede leerla
+        db[destinatario]["datos"]["_ui_consumida"]  = False  # ← listo para ser recogida por main.py
         nuevo_log = {
             "usuario": destinatario,
             "tarea": tarea,
@@ -169,26 +170,13 @@ def logout():
 
 
 # ══════════════════════════════════════════════════════════════════
-#  ENDPOINTS LEGACY — usados por ui.py (FocusMind OS antiguo)
-#  ui.py llama a /obtener_datos (GET) y /actualizar (POST)
+#  ENDPOINTS LEGACY — usados por ui.py
 # ══════════════════════════════════════════════════════════════════
-
-# Almacén temporal en memoria para el canal ui.py
-# (usa la misma DB pero con claves separadas para no mezclarse)
-_cola_ui = {}   # { usuario: {"ultima_tarea": str, "tiempo_meta": str} }
 
 @app.route("/obtener_datos", methods=["GET"])
 def obtener_datos():
-    """
-    Usado por ui.py → escuchar_nube().
-    Devuelve la última tarea pendiente para el usuario (o global si no hay user param).
-    ui.py espera: { "ultima_tarea": str, "tiempo_meta": str }
-    """
     user = request.args.get("user", "__global__")
     db = cargar_db()
-
-    # Busca en todos los operadores si alguno tiene tarea nueva marcada para UI
-    # ui.py no manda 'user', así que respondemos con la primera tarea pendiente
     for op, info in db.items():
         if op == "log_global":
             continue
@@ -196,46 +184,33 @@ def obtener_datos():
         tarea = d.get("tarea_actual", "Esperando mando...")
         if tarea not in ("Esperando mando...", "Mision Cumplida",
                          "Finalizada con Retraso", "Ninguna", ""):
-            # Solo devolvemos si no fue ya consumida
             if not d.get("_ui_consumida", False):
                 return jsonify({
                     "ultima_tarea": tarea,
                     "tiempo_meta":  str(d.get("tiempo_actual", 25))
                 })
-
     return jsonify({"ultima_tarea": "Ninguna", "tiempo_meta": "25"})
 
 
 @app.route("/actualizar", methods=["POST"])
 def actualizar():
-    """
-    Usado por ui.py para marcar que ya consumió la tarea
-    (manda {"ultima_tarea": "Ninguna"} para limpiar).
-    También acepta {"usuario": x, "ultima_tarea": y} para asignar tareas.
-    """
     data = request.get_json(silent=True) or {}
     nueva_tarea = data.get("ultima_tarea", "")
     user        = data.get("usuario", "")
-
     db = cargar_db()
-
     if nueva_tarea in ("Ninguna", "", None):
-        # ui.py está limpiando — marcar como consumida en todos los operadores
         for op, info in db.items():
             if op != "log_global":
                 info["datos"]["_ui_consumida"] = True
         guardar_db(db)
         return jsonify({"ok": True, "msg": "Cola limpiada"})
-
     if user and user in db and user != "log_global":
-        # Asignación directa a un usuario específico
         db[user]["datos"]["tarea_actual"]   = nueva_tarea
         db[user]["datos"]["tiempo_actual"]  = int(data.get("tiempo_meta", 25))
         db[user]["datos"]["_ui_consumida"]  = False
         db[user]["datos"]["id_envio"]      += 1
         guardar_db(db)
         return jsonify({"ok": True})
-
     return jsonify({"ok": False, "error": "Sin datos válidos"}), 400
 
 
@@ -243,15 +218,31 @@ def actualizar():
 #  ENDPOINTS PRINCIPALES — usados por logic.py (main.py / LUMINA)
 # ══════════════════════════════════════════════════════════════════
 
-# ── RUTA CRÍTICA: usada por logic.py cada 10s para obtener tareas ──
 @app.route("/get_data")
 def get_data():
+    """
+    FIX: ahora respeta _ui_consumida.
+    Si la tarea ya fue recogida por main.py, devuelve estado neutro
+    para que el ciclo de 10s no la procese de nuevo.
+    """
     user = request.args.get("user")
     if not user:
         return jsonify({"error": "user requerido"}), 400
     db = cargar_db()
     if user in db and user != "log_global":
         d = db[user]["datos"]
+
+        # Si ya fue consumida, devolver estado neutro con el mismo id
+        # (main.py lo ignorará porque ya tiene ese id en ultimo_id_recibido)
+        if d.get("_ui_consumida", True):
+            return jsonify({
+                "tarea":     "Esperando mando...",
+                "tiempo":    0,
+                "id":        d.get("id_envio", 0),
+                "remitente": d.get("enviado_por", "Sistema")
+            })
+
+        # Tarea nueva disponible — entregarla
         return jsonify({
             "tarea":     d.get("tarea_actual", "Esperando mando..."),
             "tiempo":    d.get("tiempo_actual", 0),
@@ -261,12 +252,36 @@ def get_data():
     return jsonify({"error": "usuario no encontrado"}), 404
 
 
-# ── RUTA CRÍTICA: usada por logic.py para reportar éxito/retraso ──
+@app.route("/ack_tarea", methods=["POST"])
+def ack_tarea():
+    """
+    NUEVO: llamado por logic.py después de recibir una tarea exitosamente.
+    Marca _ui_consumida = True para que /get_data no la repita.
+    """
+    data    = request.get_json(silent=True) or {}
+    user    = data.get("user")
+    id_recv = data.get("id")
+
+    if not user:
+        return jsonify({"ok": False, "error": "user requerido"}), 400
+
+    db = cargar_db()
+    if user in db and user != "log_global":
+        d = db[user]["datos"]
+        # Solo marcar consumida si el id coincide (evita ACK tardío)
+        if id_recv is None or d.get("id_envio") == id_recv:
+            d["_ui_consumida"] = True
+            guardar_db(db)
+            return jsonify({"ok": True})
+
+    return jsonify({"ok": False, "error": "usuario o id no encontrado"}), 404
+
+
 @app.route("/reportar_progreso", methods=["POST"])
 def reportar_progreso():
     data = request.get_json(silent=True) or {}
     user         = data.get("user")
-    estado       = data.get("estado", "EXITO")   # "EXITO" o "RETRASO"
+    estado       = data.get("estado", "EXITO")
     tarea_nombre = data.get("tarea_nombre", "")
     if not user:
         return jsonify({"ok": False, "error": "user requerido"}), 400
@@ -276,11 +291,8 @@ def reportar_progreso():
 
     db_user    = db[user]["datos"]
     es_retraso = (estado == "RETRASO")
-
-    # Nombre de tarea: usa el enviado, o el que tiene guardado
     nombre_final = tarea_nombre or db_user.get("tarea_actual", "Sin nombre")
 
-    # No loguear si es el estado vacío de inicio
     if nombre_final not in ("Esperando mando...", "Misión Cumplida", "Finalizada con Retraso"):
         entrada = {
             "usuario":     user,
@@ -293,7 +305,6 @@ def reportar_progreso():
             db["log_global"] = []
         db["log_global"].append(entrada)
 
-    # Actualizar estadísticas y estado
     if es_retraso:
         db_user["rendimiento"]["retrasos"] += 1
         db_user["tarea_actual"] = "Finalizada con Retraso"
@@ -304,6 +315,10 @@ def reportar_progreso():
     guardar_db(db)
     return jsonify({"ok": True, "msg": "Telemetría registrada"})
 
+
+# ══════════════════════════════════════════════════════════════════
+#  HTML (sin cambios)
+# ══════════════════════════════════════════════════════════════════
 
 HTML_AUTH = """
 <!DOCTYPE html>
@@ -410,25 +425,20 @@ HTML_PANEL = """
       background-size: 40px 40px; pointer-events: none; z-index: 0;
     }
     .wrap { position: relative; z-index: 1; max-width: 580px; margin: 0 auto; }
-
     .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
     .session-info { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--neon); letter-spacing: 2px; text-transform: uppercase; font-family: 'Share Tech Mono', monospace; }
     .dot-live { width: 6px; height: 6px; border-radius: 50%; background: var(--neon); flex-shrink: 0; animation: pulse 1.8s infinite; }
     .logout-link { font-size: 10px; color: var(--red); text-decoration: none; letter-spacing: 1px; border: 0.5px solid rgba(255,79,79,0.28); padding: 5px 11px; border-radius: 5px; font-family: 'Share Tech Mono', monospace; transition: background 0.2s; }
     .logout-link:hover { background: rgba(255,79,79,0.08); }
-
     .logo h1 { font-family: 'Share Tech Mono', monospace; font-size: 30px; letter-spacing: 12px; color: var(--neon); font-weight: 400; text-align: center; }
     .logo .sub { font-size: 9px; color: rgba(0,229,160,0.35); letter-spacing: 4px; margin-top: 5px; text-transform: uppercase; text-align: center; margin-bottom: 22px; }
-
     .console { background: var(--neon-dim); border-left: 2px solid var(--neon); padding: 13px 16px; border-radius: 0 8px 8px 0; margin-bottom: 20px; display: flex; align-items: flex-start; gap: 10px; }
     .console .prompt { color: var(--neon); font-family: 'Share Tech Mono', monospace; font-size: 13px; }
     .console .msg { color: #7fffd4; font-family: 'Share Tech Mono', monospace; font-size: 12px; line-height: 1.6; }
     .cursor { display: inline-block; width: 7px; height: 13px; background: var(--neon); margin-left: 3px; animation: blink 1s step-end infinite; }
-
     .card { background: var(--card); border: 0.5px solid var(--border); border-radius: 16px; padding: 20px 22px; margin-bottom: 16px; position: relative; overflow: hidden; }
     .card-label { font-size: 9px; color: var(--neon); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; font-family: 'Share Tech Mono', monospace; }
     .card-label::after { content: ''; flex: 1; height: 0.5px; background: var(--neon-border); }
-
     .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
     .form-group { display: flex; flex-direction: column; gap: 5px; }
     .form-group label { font-size: 9px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
@@ -439,8 +449,6 @@ HTML_PANEL = """
     }
     select:focus, input:focus { border-color: var(--neon-border); }
     .full-field { margin-bottom: 14px; }
-
-    /* ── DEPLOY BUTTON ── */
     .deploy-btn {
       width: 100%; padding: 13px; background: var(--neon); color: #041a0e;
       font-family: 'Syne', sans-serif; font-weight: 600; font-size: 11px;
@@ -450,67 +458,24 @@ HTML_PANEL = """
     }
     .deploy-btn:hover { opacity: 0.88; box-shadow: 0 0 20px rgba(0,229,160,0.25); }
     .deploy-btn:active { transform: scale(0.985); }
-    .deploy-btn.sending {
-      background: #060e0a; color: var(--neon);
-      border: 0.5px solid var(--neon-border); pointer-events: none;
-      box-shadow: 0 0 30px rgba(0,229,160,0.12);
-    }
-    .deploy-btn.done {
-      background: #060e0a; color: var(--neon);
-      border: 0.5px solid var(--neon-border); pointer-events: none;
-    }
+    .deploy-btn.sending { background: #060e0a; color: var(--neon); border: 0.5px solid var(--neon-border); pointer-events: none; box-shadow: 0 0 30px rgba(0,229,160,0.12); }
+    .deploy-btn.done { background: #060e0a; color: var(--neon); border: 0.5px solid var(--neon-border); pointer-events: none; }
     .deploy-btn i { font-size: 15px; transition: transform 0.3s; }
     .deploy-btn.sending i { animation: spinIcon 0.65s linear infinite; }
     .deploy-btn.done i { animation: popCheck 0.4s cubic-bezier(0.34,1.56,0.64,1) both; }
-
-    /* progress bar */
-    .btn-bar {
-      position: absolute; left: 0; bottom: 0; height: 2px;
-      background: linear-gradient(90deg, var(--neon), #00ffcc);
-      width: 0%; border-radius: 0 0 8px 8px;
-      box-shadow: 0 0 10px rgba(0,229,160,0.7);
-      transition: none;
-    }
-
-    /* ── OPERATOR ROWS ── */
-    .op-row {
-      display: grid; grid-template-columns: 40px 1fr auto auto;
-      gap: 14px; align-items: center; padding: 13px 0;
-      border-bottom: 0.5px solid var(--border); position: relative;
-      border-radius: 8px; transition: background 0.5s;
-    }
+    .btn-bar { position: absolute; left: 0; bottom: 0; height: 2px; background: linear-gradient(90deg, var(--neon), #00ffcc); width: 0%; border-radius: 0 0 8px 8px; box-shadow: 0 0 10px rgba(0,229,160,0.7); transition: none; }
+    .op-row { display: grid; grid-template-columns: 40px 1fr auto auto; gap: 14px; align-items: center; padding: 13px 0; border-bottom: 0.5px solid var(--border); position: relative; border-radius: 8px; transition: background 0.5s; }
     .op-row:last-child { border-bottom: none; }
     .op-row.targeted { background: rgba(0,229,160,0.04); }
-
-    /* ripple border */
-    .row-ripple {
-      position: absolute; left: 0; top: 0; right: 0; bottom: 0;
-      border-radius: 8px; pointer-events: none;
-      border: 1.5px solid var(--neon); opacity: 0;
-    }
+    .row-ripple { position: absolute; left: 0; top: 0; right: 0; bottom: 0; border-radius: 8px; pointer-events: none; border: 1.5px solid var(--neon); opacity: 0; }
     .op-row.targeted .row-ripple { animation: rippleRow 0.8s ease-out forwards; }
-
-    /* scan line */
-    .scan-line {
-      position: absolute; left: 0; right: 0; height: 2px;
-      background: linear-gradient(90deg, transparent, var(--neon), #00ffcc, transparent);
-      top: 0; opacity: 0; pointer-events: none; z-index: 5;
-      box-shadow: 0 0 10px rgba(0,229,160,0.6);
-    }
+    .scan-line { position: absolute; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--neon), #00ffcc, transparent); top: 0; opacity: 0; pointer-events: none; z-index: 5; box-shadow: 0 0 10px rgba(0,229,160,0.6); }
     .scan-line.scanning { animation: scanDown 0.6s linear forwards; }
-
-    /* avatar glow on target */
-    .op-avatar {
-      width: 38px; height: 38px; border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-family: 'Share Tech Mono', monospace; font-size: 10px; font-weight: 600;
-      flex-shrink: 0; transition: box-shadow 0.4s, transform 0.4s;
-    }
+    .op-avatar { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Share Tech Mono', monospace; font-size: 10px; font-weight: 600; flex-shrink: 0; transition: box-shadow 0.4s, transform 0.4s; }
     .op-row.targeted .op-avatar { box-shadow: 0 0 20px rgba(0,229,160,0.5); transform: scale(1.1); }
     .av-neon  { background: rgba(0,229,160,0.1);  color: var(--neon);  border: 0.5px solid var(--neon-border); }
     .av-blue  { background: rgba(90,120,255,0.1); color: #8fa8ff; border: 0.5px solid rgba(90,120,255,0.25); }
     .av-amber { background: rgba(245,166,35,0.1); color: var(--amber); border: 0.5px solid rgba(245,166,35,0.25); }
-
     .op-name { font-size: 13px; color: #eee; font-weight: 500; }
     .op-task { font-size: 10px; color: var(--muted); margin-top: 3px; display: flex; align-items: center; gap: 5px; font-family: 'Share Tech Mono', monospace; }
     .op-via  { font-size: 9px; color: #333; font-family: 'Share Tech Mono', monospace; }
@@ -528,8 +493,6 @@ HTML_PANEL = """
     .add-link:hover { opacity: 1; background: rgba(0,229,160,0.02); }
     .add-box-wrap { display: none; margin-top: 12px; padding: 12px; background: #080909; border: 0.5px solid var(--neon-border); border-radius: 8px; }
     .add-box-form { display: flex; gap: 8px; }
-
-    /* log */
     .log-scroll { max-height: 260px; overflow-y: auto; }
     .log-scroll::-webkit-scrollbar { width: 3px; }
     .log-scroll::-webkit-scrollbar-thumb { background: var(--neon-border); border-radius: 3px; }
@@ -541,41 +504,16 @@ HTML_PANEL = """
     .tag-deploy { font-size: 8px; color: #8fa8ff; border: 0.5px solid rgba(90,120,255,0.3); padding: 2px 6px; border-radius: 3px; font-family: 'Share Tech Mono', monospace; display: inline-block; margin-top: 3px; }
     .log-time   { font-size: 9px; color: #555; text-align: right; font-family: 'Share Tech Mono', monospace; }
     .empty-log  { color: var(--muted); font-size: 11px; text-align: center; padding: 28px 0; font-family: 'Share Tech Mono', monospace; }
-
-    /* ── PARTICLES ── */
-    .particle {
-      position: fixed; border-radius: 50%; pointer-events: none; z-index: 9999;
-      animation: particleFly var(--dur) ease-out var(--delay) both;
-    }
-
-    /* ── LAUNCH OVERLAY ── */
-    .launch-overlay {
-      position: fixed; inset: 0; z-index: 8000;
-      display: flex; align-items: center; justify-content: center;
-      pointer-events: none; opacity: 0; transition: opacity 0.3s;
-      backdrop-filter: blur(0px);
-    }
+    .particle { position: fixed; border-radius: 50%; pointer-events: none; z-index: 9999; animation: particleFly var(--dur) ease-out var(--delay) both; }
+    .launch-overlay { position: fixed; inset: 0; z-index: 8000; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; transition: opacity 0.3s; backdrop-filter: blur(0px); }
     .launch-overlay.active { opacity: 1; backdrop-filter: blur(2px); }
-    .launch-box {
-      background: rgba(6,10,8,0.97);
-      border: 0.5px solid var(--neon-border);
-      border-radius: 20px; padding: 32px 48px; text-align: center;
-      font-family: 'Share Tech Mono', monospace;
-      transform: scale(0.8) translateY(20px);
-      transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
-      box-shadow: 0 0 60px rgba(0,229,160,0.08), 0 0 120px rgba(0,229,160,0.04);
-    }
+    .launch-box { background: rgba(6,10,8,0.97); border: 0.5px solid var(--neon-border); border-radius: 20px; padding: 32px 48px; text-align: center; font-family: 'Share Tech Mono', monospace; transform: scale(0.8) translateY(20px); transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1); box-shadow: 0 0 60px rgba(0,229,160,0.08), 0 0 120px rgba(0,229,160,0.04); }
     .launch-overlay.active .launch-box { transform: scale(1) translateY(0); }
     .launch-title { font-size: 9px; color: rgba(0,229,160,0.45); letter-spacing: 5px; margin-bottom: 12px; text-transform: uppercase; }
     .launch-name  { font-size: 26px; color: var(--neon); letter-spacing: 4px; margin-bottom: 4px; text-shadow: 0 0 20px rgba(0,229,160,0.4); }
     .launch-sub   { font-size: 9px; color: #444; letter-spacing: 2px; margin-bottom: 20px; }
     .launch-rings { position: relative; width: 90px; height: 90px; margin: 0 auto; }
-    .ring {
-      position: absolute; border-radius: 50%;
-      border: 1px solid rgba(0,229,160,0.6);
-      top: 50%; left: 50%;
-      transform: translate(-50%,-50%) scale(0); opacity: 0;
-    }
+    .ring { position: absolute; border-radius: 50%; border: 1px solid rgba(0,229,160,0.6); top: 50%; left: 50%; transform: translate(-50%,-50%) scale(0); opacity: 0; }
     .launch-overlay.active .ring:nth-child(1) { animation: ringExpand 1.1s ease-out 0.05s both; }
     .launch-overlay.active .ring:nth-child(2) { animation: ringExpand 1.1s ease-out 0.22s both; }
     .launch-overlay.active .ring:nth-child(3) { animation: ringExpand 1.1s ease-out 0.39s both; }
@@ -584,37 +522,16 @@ HTML_PANEL = """
     .ring:nth-child(3) { width: 90px;  height: 90px; }
     .launch-icon { position: absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size: 28px; color: var(--neon); }
     .launch-overlay.active .launch-icon { animation: rocketPop 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.1s both; }
-
-    /* ── SVG BEAM GLOW FILTER ── */
     #beam-svg { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 7999; }
-
-    /* ── SCREEN FLASH ── */
-    #screen-flash {
-      position: fixed; inset: 0; pointer-events: none; z-index: 7998;
-      background: rgba(0,229,160,0.0); transition: background 0.08s;
-    }
+    #screen-flash { position: fixed; inset: 0; pointer-events: none; z-index: 7998; background: rgba(0,229,160,0.0); transition: background 0.08s; }
     #screen-flash.flash { background: rgba(0,229,160,0.07); }
-
-    /* ── TYPEWRITER TASK ── */
     .task-updating { color: var(--neon) !important; }
-
-    /* ── COUNTDOWN ARC ── */
-    .countdown-wrap {
-      position: absolute; top: 14px; right: 18px;
-      width: 32px; height: 32px; opacity: 0;
-      transition: opacity 0.2s;
-    }
+    .countdown-wrap { position: absolute; top: 14px; right: 18px; width: 32px; height: 32px; opacity: 0; transition: opacity 0.2s; }
     .countdown-wrap.visible { opacity: 1; }
     .countdown-svg { transform: rotate(-90deg); }
     .countdown-track { fill: none; stroke: rgba(0,229,160,0.1); stroke-width: 2.5; }
-    .countdown-arc   { fill: none; stroke: var(--neon); stroke-width: 2.5; stroke-linecap: round;
-      stroke-dasharray: 82; stroke-dashoffset: 82; transition: stroke-dashoffset 1.2s linear; }
-    .countdown-num {
-      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-      font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--neon);
-    }
-
-    /* ── ANIMATIONS ── */
+    .countdown-arc   { fill: none; stroke: var(--neon); stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 82; stroke-dashoffset: 82; transition: stroke-dashoffset 1.2s linear; }
+    .countdown-num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--neon); }
     @keyframes pulse     { 0%,100%{opacity:1} 50%{opacity:0.25} }
     @keyframes pulseDot  { 0%,100%{box-shadow:0 0 5px rgba(0,229,160,0.6)} 50%{box-shadow:0 0 10px rgba(0,229,160,1)} }
     @keyframes blink     { 0%,100%{opacity:1} 50%{opacity:0} }
@@ -627,60 +544,39 @@ HTML_PANEL = """
     @keyframes popCheck  { 0%{transform:scale(0) rotate(-20deg)} 100%{transform:scale(1) rotate(0deg)} }
     @keyframes rocketPop { 0%{transform:translate(-50%,-50%) scale(0.3) rotate(-20deg);opacity:0} 100%{transform:translate(-50%,-50%) scale(1) rotate(0deg);opacity:1} }
     @keyframes beamTravel { 0%{stroke-dashoffset:var(--beam-len);opacity:0.9} 100%{stroke-dashoffset:0;opacity:0} }
-    @keyframes logSlide  { from{opacity:0;transform:translateY(-12px)} to{opacity:1;transform:none} }
     @keyframes shakeRow  { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-3px)} 75%{transform:translateX(3px)} }
     .fade-in { animation: fadeSlide 0.35s ease both; }
   </style>
 </head>
 <body>
-
-<!-- Screen flash layer -->
 <div id="screen-flash"></div>
-
-<!-- Launch overlay -->
 <div class="launch-overlay" id="launch-overlay">
   <div class="launch-box">
     <div class="launch-title">Misión desplegada</div>
     <div class="launch-name" id="launch-dest">—</div>
     <div class="launch-sub" id="launch-task-sub">objetivo asignado</div>
     <div class="launch-rings">
-      <div class="ring"></div>
-      <div class="ring"></div>
-      <div class="ring"></div>
+      <div class="ring"></div><div class="ring"></div><div class="ring"></div>
       <i class="ti ti-rocket launch-icon"></i>
     </div>
   </div>
 </div>
-
-<!-- SVG beam layer -->
 <svg id="beam-svg" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <filter id="neon-glow">
-      <feGaussianBlur stdDeviation="3" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <filter id="neon-glow-soft">
-      <feGaussianBlur stdDeviation="1.5" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
+    <filter id="neon-glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
   </defs>
 </svg>
-
 <div class="wrap">
   <div class="top-bar">
     <div class="session-info"><span class="dot-live"></span>SESIÓN: {{ usuario }}</div>
     <a href="/logout" class="logout-link">[ SALIR ]</a>
   </div>
   <div class="logo"><h1>LUMINA OS</h1><div class="sub">Sistema de gestión de misiones</div></div>
-
   <div class="console">
     <span class="prompt">&gt;</span>
     <span class="msg" id="console-msg">{{ ultimo_msj }}<span class="cursor"></span></span>
   </div>
-
-  <!-- DEPLOY CARD -->
   <div class="card fade-in" id="form-card">
-    <!-- Countdown arc -->
     <div class="countdown-wrap" id="countdown-wrap">
       <svg class="countdown-svg" width="32" height="32" viewBox="0 0 32 32">
         <circle class="countdown-track" cx="16" cy="16" r="13"/>
@@ -688,16 +584,13 @@ HTML_PANEL = """
       </svg>
       <div class="countdown-num" id="countdown-num">3</div>
     </div>
-
     <div class="card-label"><i class="ti ti-rocket"></i> Desplegar actividad</div>
     <form id="deploy-form" onsubmit="interceptDeploy(event)">
       <div class="form-row">
         <div class="form-group">
           <label>Asignar a</label>
           <select name="destinatario" id="dest-select">
-            {% for user in lista_usuarios %}
-              <option value="{{ user }}">{{ user }}</option>
-            {% endfor %}
+            {% for user in lista_usuarios %}<option value="{{ user }}">{{ user }}</option>{% endfor %}
           </select>
         </div>
         <div class="form-group">
@@ -716,8 +609,6 @@ HTML_PANEL = """
       </button>
     </form>
   </div>
-
-  <!-- MONITOR -->
   <div class="card fade-in" id="monitor-card">
     <div class="card-label"><i class="ti ti-radar"></i> Monitor de equipo</div>
     <div id="operator-rows-container">
@@ -746,9 +637,7 @@ HTML_PANEL = """
         </div>
         <div>
           {% if op_name != 'operador1' %}
-            <div onclick="eliminarOperadorAjax('{{ op_name }}')" class="del-btn" title="Dar de baja">
-              <i class="ti ti-trash"></i>
-            </div>
+            <div onclick="eliminarOperadorAjax('{{ op_name }}')" class="del-btn" title="Dar de baja"><i class="ti ti-trash"></i></div>
           {% else %}
             <div style="width:28px;"></div>
           {% endif %}
@@ -764,8 +653,6 @@ HTML_PANEL = """
       </form>
     </div>
   </div>
-
-  <!-- LOG -->
   <div class="card fade-in">
     <div class="card-label"><i class="ti ti-list-check"></i> Registro de misiones</div>
     <div class="log-scroll" id="log-list">
@@ -773,11 +660,7 @@ HTML_PANEL = """
         {% for log in log_global[::-1] %}
         <div class="log-entry">
           <span class="log-user">{{ log.usuario }}</span>
-          <div>
-            <div class="log-name">{{ log.tarea }}</div>
-            <div class="log-via">Por: {{ log.enviado_por }}</div>
-            <span class="tag-deploy">Desplegada</span>
-          </div>
+          <div><div class="log-name">{{ log.tarea }}</div><div class="log-via">Por: {{ log.enviado_por }}</div><span class="tag-deploy">Desplegada</span></div>
           <div class="log-time">{{ log.fecha }}</div>
         </div>
         {% endfor %}
@@ -787,423 +670,192 @@ HTML_PANEL = """
     </div>
   </div>
 </div>
-
 <script>
-/* ═══════════════════════════════════════════
-   PARTICLES
-═══════════════════════════════════════════ */
 function spawnParticles(fromEl, toEl, count) {
   count = count || 22;
-  var fR = fromEl.getBoundingClientRect();
-  var tR = toEl.getBoundingClientRect();
-  var sx = fR.left + fR.width / 2;
-  var sy = fR.top  + fR.height / 2;
-  var tx0 = tR.left + tR.width  / 2 - sx;
-  var ty0 = tR.top  + tR.height / 2 - sy;
+  var fR = fromEl.getBoundingClientRect(); var tR = toEl.getBoundingClientRect();
+  var sx = fR.left + fR.width/2; var sy = fR.top + fR.height/2;
+  var tx0 = tR.left + tR.width/2 - sx; var ty0 = tR.top + tR.height/2 - sy;
   var colors = ['#00e5a0','#7fffd4','#00c884','#a0ffe0','#ffffff'];
   for (var i = 0; i < count; i++) {
-    var p   = document.createElement('div');
-    var sz  = 2.5 + Math.random() * 4;
-    var spread = (Math.random() - 0.5) * 90;
-    var tx  = tx0 + spread;
-    var ty  = ty0 + (Math.random() - 0.5) * 60;
-    var dur = 0.5 + Math.random() * 0.45;
-    var del = i * 0.025;
-    var col = colors[Math.floor(Math.random() * colors.length)];
+    var p = document.createElement('div'); var sz = 2.5 + Math.random()*4;
+    var tx = tx0 + (Math.random()-0.5)*90; var ty = ty0 + (Math.random()-0.5)*60;
+    var dur = 0.5 + Math.random()*0.45; var del = i*0.025;
+    var col = colors[Math.floor(Math.random()*colors.length)];
     p.className = 'particle';
-    p.style.cssText = 'width:' + sz + 'px;height:' + sz + 'px;background:' + col + ';left:' + sx + 'px;top:' + sy + 'px;--tx:' + tx + 'px;--ty:' + ty + 'px;--dur:' + dur + 's;--delay:' + del + 's;';
+    p.style.cssText = 'width:'+sz+'px;height:'+sz+'px;background:'+col+';left:'+sx+'px;top:'+sy+'px;--tx:'+tx+'px;--ty:'+ty+'px;--dur:'+dur+'s;--delay:'+del+'s;';
     document.body.appendChild(p);
-    setTimeout((function(el){ return function(){ el.remove(); }; })(p), (dur + del) * 1000 + 200);
+    setTimeout((function(el){ return function(){ el.remove(); }; })(p), (dur+del)*1000+200);
   }
 }
-
-/* burst of particles from a center point outward in all directions */
 function burstParticles(el, count) {
-  count = count || 16;
-  var r = el.getBoundingClientRect();
-  var cx = r.left + r.width / 2;
-  var cy = r.top  + r.height / 2;
+  count = count || 16; var r = el.getBoundingClientRect();
+  var cx = r.left+r.width/2; var cy = r.top+r.height/2;
   var colors = ['#00e5a0','#7fffd4','#00c884'];
   for (var i = 0; i < count; i++) {
-    var angle = (i / count) * Math.PI * 2;
-    var dist  = 40 + Math.random() * 50;
-    var p = document.createElement('div');
-    var sz = 2 + Math.random() * 3;
-    var tx = Math.cos(angle) * dist;
-    var ty = Math.sin(angle) * dist;
-    var dur = 0.4 + Math.random() * 0.3;
-    var del = Math.random() * 0.06;
-    var col = colors[Math.floor(Math.random() * colors.length)];
+    var angle = (i/count)*Math.PI*2; var dist = 40+Math.random()*50;
+    var p = document.createElement('div'); var sz = 2+Math.random()*3;
+    var tx = Math.cos(angle)*dist; var ty = Math.sin(angle)*dist;
+    var dur = 0.4+Math.random()*0.3; var del = Math.random()*0.06;
+    var col = colors[Math.floor(Math.random()*colors.length)];
     p.className = 'particle';
-    p.style.cssText = 'width:' + sz + 'px;height:' + sz + 'px;background:' + col + ';left:' + cx + 'px;top:' + cy + 'px;--tx:' + tx + 'px;--ty:' + ty + 'px;--dur:' + dur + 's;--delay:' + del + 's;';
+    p.style.cssText = 'width:'+sz+'px;height:'+sz+'px;background:'+col+';left:'+cx+'px;top:'+cy+'px;--tx:'+tx+'px;--ty:'+ty+'px;--dur:'+dur+'s;--delay:'+del+'s;';
     document.body.appendChild(p);
-    setTimeout((function(el){ return function(){ el.remove(); }; })(p), (dur + del) * 1000 + 200);
+    setTimeout((function(el){ return function(){ el.remove(); }; })(p), (dur+del)*1000+200);
   }
 }
-
-/* ═══════════════════════════════════════════
-   SVG BEAM (with glow trail)
-═══════════════════════════════════════════ */
 function fireBeam(fromEl, toEl) {
   var svg = document.getElementById('beam-svg');
-  var fR  = fromEl.getBoundingClientRect();
-  var tR  = toEl.getBoundingClientRect();
-  var x1  = fR.left + fR.width  / 2;
-  var y1  = fR.top  + fR.height / 2;
-  var x2  = tR.left + tR.width  / 2;
-  var y2  = tR.top  + tR.height / 2;
-  var len = Math.hypot(x2 - x1, y2 - y1);
-
-  /* glow layer (thick, blurred) */
-  var glow = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-  glow.setAttribute('x1', x1); glow.setAttribute('y1', y1);
-  glow.setAttribute('x2', x2); glow.setAttribute('y2', y2);
-  glow.setAttribute('stroke', 'rgba(0,229,160,0.35)');
-  glow.setAttribute('stroke-width', '6');
-  glow.setAttribute('stroke-dasharray', len);
-  glow.setAttribute('stroke-dashoffset', len);
-  glow.setAttribute('filter', 'url(#neon-glow)');
-  glow.style.setProperty('--beam-len', len);
-  glow.style.animation = 'beamTravel 0.5s ease-in-out forwards';
-  svg.appendChild(glow);
-
-  /* sharp core */
-  var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-  line.setAttribute('x1', x1); line.setAttribute('y1', y1);
-  line.setAttribute('x2', x2); line.setAttribute('y2', y2);
-  line.setAttribute('stroke', '#00e5a0');
-  line.setAttribute('stroke-width', '1.5');
-  line.setAttribute('stroke-dasharray', len);
-  line.setAttribute('stroke-dashoffset', len);
-  line.style.setProperty('--beam-len', len);
-  line.style.animation = 'beamTravel 0.5s ease-in-out forwards';
-  svg.appendChild(line);
-
-  setTimeout(function(){ glow.remove(); line.remove(); }, 600);
+  var fR = fromEl.getBoundingClientRect(); var tR = toEl.getBoundingClientRect();
+  var x1 = fR.left+fR.width/2; var y1 = fR.top+fR.height/2;
+  var x2 = tR.left+tR.width/2; var y2 = tR.top+tR.height/2;
+  var len = Math.hypot(x2-x1, y2-y1);
+  ['rgba(0,229,160,0.35)', '#00e5a0'].forEach(function(color, idx) {
+    var line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1',x1); line.setAttribute('y1',y1);
+    line.setAttribute('x2',x2); line.setAttribute('y2',y2);
+    line.setAttribute('stroke', color);
+    line.setAttribute('stroke-width', idx===0 ? '6' : '1.5');
+    line.setAttribute('stroke-dasharray', len);
+    line.setAttribute('stroke-dashoffset', len);
+    if (idx===0) line.setAttribute('filter','url(#neon-glow)');
+    line.style.setProperty('--beam-len', len);
+    line.style.animation = 'beamTravel 0.5s ease-in-out forwards';
+    svg.appendChild(line);
+    setTimeout(function(){ line.remove(); }, 600);
+  });
 }
-
-/* ═══════════════════════════════════════════
-   SCAN LINE
-═══════════════════════════════════════════ */
 function triggerScanLine(destUser) {
-  var scan = document.getElementById('scan-' + destUser);
-  if (!scan) return;
-  scan.classList.remove('scanning');
-  void scan.offsetWidth;
-  scan.classList.add('scanning');
+  var scan = document.getElementById('scan-'+destUser); if (!scan) return;
+  scan.classList.remove('scanning'); void scan.offsetWidth; scan.classList.add('scanning');
   setTimeout(function(){ scan.classList.remove('scanning'); }, 700);
 }
-
-/* ═══════════════════════════════════════════
-   SCREEN FLASH
-═══════════════════════════════════════════ */
 function screenFlash() {
-  var fl = document.getElementById('screen-flash');
-  fl.classList.add('flash');
+  var fl = document.getElementById('screen-flash'); fl.classList.add('flash');
   setTimeout(function(){ fl.classList.remove('flash'); }, 120);
 }
-
-/* ═══════════════════════════════════════════
-   HIGHLIGHT ROW
-═══════════════════════════════════════════ */
 function highlightRow(destUser) {
   document.querySelectorAll('.op-row').forEach(function(r){ r.classList.remove('targeted'); });
-  var row = document.getElementById('row-' + destUser);
-  if (row) {
-    row.classList.add('targeted');
-    /* shake for impact */
-    row.style.animation = 'shakeRow 0.25s ease both';
-    setTimeout(function(){ row.style.animation = ''; }, 300);
-  }
+  var row = document.getElementById('row-'+destUser);
+  if (row) { row.classList.add('targeted'); row.style.animation = 'shakeRow 0.25s ease both'; setTimeout(function(){ row.style.animation = ''; }, 300); }
   return row;
 }
-
-/* ═══════════════════════════════════════════
-   TYPEWRITER on task label
-═══════════════════════════════════════════ */
 function typeTask(destUser, text) {
-  var el = document.getElementById('task-txt-' + destUser);
-  if (!el) return;
-  el.classList.add('task-updating');
-  var i = 0; el.textContent = '|';
+  var el = document.getElementById('task-txt-'+destUser); if (!el) return;
+  el.classList.add('task-updating'); var i = 0; el.textContent = '|';
   var iv = setInterval(function(){
-    el.textContent = text.slice(0, i) + (i < text.length ? '|' : '');
-    i++;
+    el.textContent = text.slice(0,i) + (i < text.length ? '|' : ''); i++;
     if (i > text.length) { clearInterval(iv); el.classList.remove('task-updating'); }
   }, 35);
 }
-
-/* ═══════════════════════════════════════════
-   CONSOLE TYPEWRITER
-═══════════════════════════════════════════ */
 function typeConsole(text) {
-  var el = document.getElementById('console-msg');
-  el.innerHTML = '';
-  var i = 0;
+  var el = document.getElementById('console-msg'); el.innerHTML = ''; var i = 0;
   var iv = setInterval(function(){
-    el.innerHTML = text.slice(0, i) + '<span class="cursor"></span>';
-    i++;
+    el.innerHTML = text.slice(0,i) + '<span class="cursor"></span>'; i++;
     if (i > text.length) clearInterval(iv);
   }, 28);
 }
-
-/* ═══════════════════════════════════════════
-   LAUNCH OVERLAY
-═══════════════════════════════════════════ */
 function showLaunchOverlay(destUser, tarea) {
   var ov = document.getElementById('launch-overlay');
   document.getElementById('launch-dest').textContent = destUser.toUpperCase();
-  document.getElementById('launch-task-sub').textContent =
-    tarea.length > 34 ? tarea.slice(0, 34) + '…' : tarea;
+  document.getElementById('launch-task-sub').textContent = tarea.length > 34 ? tarea.slice(0,34)+'…' : tarea;
   ov.classList.add('active');
   setTimeout(function(){ ov.classList.remove('active'); }, 1800);
 }
-
-/* ═══════════════════════════════════════════
-   COUNTDOWN ARC (3-2-1)
-═══════════════════════════════════════════ */
 function runCountdown(onDone) {
-  var wrap = document.getElementById('countdown-wrap');
-  var arc  = document.getElementById('countdown-arc');
-  var num  = document.getElementById('countdown-num');
-  var CIRCUM = 82;
-  wrap.classList.add('visible');
-  var count = 3;
-  num.textContent = count;
-  arc.style.strokeDashoffset = CIRCUM;
-
-  setTimeout(function(){
-    arc.style.transition = 'stroke-dashoffset 1s linear';
-    arc.style.strokeDashoffset = 0;
-  }, 30);
-
+  var wrap = document.getElementById('countdown-wrap'); var arc = document.getElementById('countdown-arc');
+  var num = document.getElementById('countdown-num'); var CIRCUM = 82;
+  wrap.classList.add('visible'); var count = 3; num.textContent = count; arc.style.strokeDashoffset = CIRCUM;
+  setTimeout(function(){ arc.style.transition = 'stroke-dashoffset 1s linear'; arc.style.strokeDashoffset = 0; }, 30);
   var iv = setInterval(function(){
     count--;
-    if (count <= 0) {
-      clearInterval(iv);
-      wrap.classList.remove('visible');
-      arc.style.transition = 'none';
-      arc.style.strokeDashoffset = CIRCUM;
-      onDone();
-      return;
-    }
-    num.textContent = count;
-    arc.style.transition = 'none';
-    arc.style.strokeDashoffset = CIRCUM;
-    setTimeout(function(){
-      arc.style.transition = 'stroke-dashoffset 1s linear';
-      arc.style.strokeDashoffset = 0;
-    }, 30);
+    if (count <= 0) { clearInterval(iv); wrap.classList.remove('visible'); arc.style.transition = 'none'; arc.style.strokeDashoffset = CIRCUM; onDone(); return; }
+    num.textContent = count; arc.style.transition = 'none'; arc.style.strokeDashoffset = CIRCUM;
+    setTimeout(function(){ arc.style.transition = 'stroke-dashoffset 1s linear'; arc.style.strokeDashoffset = 0; }, 30);
   }, 1000);
 }
-
-/* ═══════════════════════════════════════════
-   LOG PREPEND
-═══════════════════════════════════════════ */
 function prependLog(destUser, tarea, sessionUser) {
-  var list  = document.getElementById('log-list');
-  var empty = list.querySelector('.empty-log');
-  if (empty) empty.remove();
-  var now  = new Date();
-  var hora = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
-  var dia  = String(now.getDate()).padStart(2,'0') + '/' + String(now.getMonth()+1).padStart(2,'0');
-  var entry = document.createElement('div');
-  entry.className = 'log-entry';
+  var list = document.getElementById('log-list'); var empty = list.querySelector('.empty-log'); if (empty) empty.remove();
+  var now = new Date(); var hora = String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  var dia = String(now.getDate()).padStart(2,'0')+'/'+ String(now.getMonth()+1).padStart(2,'0');
+  var entry = document.createElement('div'); entry.className = 'log-entry';
   entry.style.cssText = 'opacity:0;transform:translateY(-10px);transition:opacity 0.4s,transform 0.4s;';
-  entry.innerHTML =
-    '<span class="log-user">' + destUser + '</span>' +
-    '<div>' +
-      '<div class="log-name">' + tarea + '</div>' +
-      '<div class="log-via">Por: ' + sessionUser + '</div>' +
-      '<span class="tag-deploy">Desplegada</span>' +
-    '</div>' +
-    '<div class="log-time">' + hora + '<br>' + dia + '</div>';
+  entry.innerHTML = '<span class="log-user">'+destUser+'</span><div><div class="log-name">'+tarea+'</div><div class="log-via">Por: '+sessionUser+'</div><span class="tag-deploy">Desplegada</span></div><div class="log-time">'+hora+'<br>'+dia+'</div>';
   list.insertBefore(entry, list.firstChild);
-  requestAnimationFrame(function(){
-    requestAnimationFrame(function(){
-      entry.style.opacity = '1';
-      entry.style.transform = 'none';
-    });
-  });
+  requestAnimationFrame(function(){ requestAnimationFrame(function(){ entry.style.opacity='1'; entry.style.transform='none'; }); });
 }
-
-/* ═══════════════════════════════════════════
-   MAIN: interceptDeploy
-═══════════════════════════════════════════ */
 var _deploying = false;
 function interceptDeploy(e) {
-  e.preventDefault();
-  if (_deploying) return;
-
-  var btn      = document.getElementById('deploy-btn');
-  var btnIcon  = document.getElementById('btn-icon');
-  var btnTxt   = document.getElementById('btn-txt');
-  var bar      = document.getElementById('btn-bar');
-  var destUser = document.getElementById('dest-select').value;
-  var tarea    = document.getElementById('tarea-input').value.trim();
+  e.preventDefault(); if (_deploying) return;
+  var btn = document.getElementById('deploy-btn'); var btnIcon = document.getElementById('btn-icon');
+  var btnTxt = document.getElementById('btn-txt'); var bar = document.getElementById('btn-bar');
+  var destUser = document.getElementById('dest-select').value; var tarea = document.getElementById('tarea-input').value.trim();
   if (!tarea || !destUser) return;
-
-  _deploying = true;
-  btn.style.pointerEvents = 'none';
-
+  _deploying = true; btn.style.pointerEvents = 'none';
   function resetBtn() {
-    _deploying = false;
-    btn.style.pointerEvents = 'auto';
-    btn.classList.remove('sending', 'done');
-    btnIcon.className = 'ti ti-player-play';
-    btnTxt.textContent = 'Desplegar mision';
-    bar.style.transition = 'none';
-    bar.style.width = '0%';
+    _deploying = false; btn.style.pointerEvents = 'auto'; btn.classList.remove('sending','done');
+    btnIcon.className = 'ti ti-player-play'; btnTxt.textContent = 'Desplegar mision';
+    bar.style.transition = 'none'; bar.style.width = '0%';
   }
-
-  /* FASE 1: countdown 3-2-1 */
   runCountdown(function(){
-
-    /* FASE 2: boton sending + barra */
-    btn.classList.add('sending');
-    btnIcon.className = 'ti ti-loader-2';
-    btnTxt.textContent = 'Transmitiendo...';
-    bar.style.transition = 'none';
-    bar.style.width = '0%';
-    requestAnimationFrame(function(){ requestAnimationFrame(function(){
-      bar.style.transition = 'width 1.1s linear';
-      bar.style.width = '100%';
-    }); });
-
-    /* FASE 3: 450ms -> beam SVG */
+    btn.classList.add('sending'); btnIcon.className = 'ti ti-loader-2'; btnTxt.textContent = 'Transmitiendo...';
+    bar.style.transition = 'none'; bar.style.width = '0%';
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){ bar.style.transition = 'width 1.1s linear'; bar.style.width = '100%'; }); });
+    setTimeout(function(){ var destAvatar = document.getElementById('av-'+destUser); if (destAvatar) fireBeam(btn, destAvatar); }, 450);
     setTimeout(function(){
-      var destAvatar = document.getElementById('av-' + destUser);
-      if (destAvatar) fireBeam(btn, destAvatar);
-    }, 450);
-
-    /* FASE 4: 750ms -> particulas + efectos + fetch */
-    setTimeout(function(){
-      var destAvatar = document.getElementById('av-' + destUser);
-      if (destAvatar) spawnParticles(btn, destAvatar);
-
-      screenFlash();
-      triggerScanLine(destUser);
-      highlightRow(destUser);
-
-      var sdot = document.getElementById('sdot-' + destUser);
-      if (sdot) sdot.className = 'sdot sdot-active';
-
-      /* POST al servidor */
+      var destAvatar = document.getElementById('av-'+destUser); if (destAvatar) spawnParticles(btn, destAvatar);
+      screenFlash(); triggerScanLine(destUser); highlightRow(destUser);
+      var sdot = document.getElementById('sdot-'+destUser); if (sdot) sdot.className = 'sdot sdot-active';
       var formData = new FormData(document.getElementById('deploy-form'));
       fetch('/enviar_tarea_web', { method: 'POST', body: formData })
       .then(function(r){ return r.json(); })
       .then(function(data){
         if (data.success) {
           showLaunchOverlay(destUser, tarea);
-
-          setTimeout(function(){
-            var av = document.getElementById('av-' + destUser);
-            if (av) burstParticles(av);
-          }, 180);
-
-          typeTask(destUser, tarea);
-          typeConsole(data.frase);
-          prependLog(destUser, tarea, '{{ usuario }}');
-
-          btn.classList.remove('sending');
-          btn.classList.add('done');
-          btnIcon.className = 'ti ti-check';
-          btnTxt.textContent = 'Desplegada';
-
-          setTimeout(function(){
-            resetBtn();
-            document.getElementById('tarea-input').value = '';
-          }, 2500);
-
-        } else {
-          typeConsole('ERROR: ' + (data.error || 'Fallo de transmision'));
-          resetBtn();
-        }
+          setTimeout(function(){ var av = document.getElementById('av-'+destUser); if (av) burstParticles(av); }, 180);
+          typeTask(destUser, tarea); typeConsole(data.frase); prependLog(destUser, tarea, '{{ usuario }}');
+          btn.classList.remove('sending'); btn.classList.add('done'); btnIcon.className = 'ti ti-check'; btnTxt.textContent = 'Desplegada';
+          setTimeout(function(){ resetBtn(); document.getElementById('tarea-input').value = ''; }, 2500);
+        } else { typeConsole('ERROR: '+(data.error||'Fallo de transmision')); resetBtn(); }
       })
-      .catch(function(){
-        typeConsole('ERROR: Sin conexion con el servidor LUMINA');
-        resetBtn();
-      });
+      .catch(function(){ typeConsole('ERROR: Sin conexion con el servidor LUMINA'); resetBtn(); });
     }, 750);
   });
 }
-
 function toggleAddBox() {
-  var box = document.getElementById('add-box');
-  box.style.display = (box.style.display === 'block') ? 'none' : 'block';
-  if (box.style.display === 'block') document.getElementById('nuevo-usuario-input').focus();
+  var box = document.getElementById('add-box'); box.style.display = (box.style.display==='block') ? 'none' : 'block';
+  if (box.style.display==='block') document.getElementById('nuevo-usuario-input').focus();
 }
-
 function agregarOperadorAjax(e) {
-  e.preventDefault();
-  var input  = document.getElementById('nuevo-usuario-input');
-  var nombre = input.value.trim();
-  if (!nombre) return;
-  var formData = new FormData();
-  formData.append('nuevo_usuario', nombre);
+  e.preventDefault(); var input = document.getElementById('nuevo-usuario-input'); var nombre = input.value.trim(); if (!nombre) return;
+  var formData = new FormData(); formData.append('nuevo_usuario', nombre);
   fetch('/agregar_usuario_ajax', { method: 'POST', body: formData })
   .then(function(r){ return r.json(); })
   .then(function(data){
     if (data.success) {
-      typeConsole(data.frase);
-      input.value = '';
-      toggleAddBox();
+      typeConsole(data.frase); input.value = ''; toggleAddBox();
       var container = document.getElementById('operator-rows-container');
       var totalRows = container.querySelectorAll('.op-row').length;
-      var avClasses = ['av-neon','av-blue','av-amber'];
-      var currentAv = avClasses[totalRows % 3];
-      var newRow = document.createElement('div');
-      newRow.className = 'op-row fade-in';
-      newRow.id = 'row-' + data.nombre;
-      newRow.innerHTML =
-        '<div class="row-ripple"></div>' +
-        '<div class="scan-line" id="scan-' + data.nombre + '"></div>' +
-        '<div class="op-avatar ' + currentAv + '" id="av-' + data.nombre + '">' + data.iniciales + '</div>' +
-        '<div>' +
-          '<div class="op-name">' + data.nombre + '</div>' +
-          '<div class="op-task" id="task-label-' + data.nombre + '">' +
-            '<span class="sdot sdot-idle" id="sdot-' + data.nombre + '"></span>' +
-            '<span id="task-txt-' + data.nombre + '">Esperando mando...</span>' +
-          '</div>' +
-          '<div class="op-via" id="via-' + data.nombre + '">vía: Sistema</div>' +
-        '</div>' +
-        '<div class="op-stats">' +
-          '<span class="stat-chip stat-ok"><i class="ti ti-check"></i>0</span>' +
-          '<span class="stat-chip stat-bad"><i class="ti ti-clock"></i>0</span>' +
-        '</div>' +
-        '<div><div onclick="eliminarOperadorAjax(\'' + data.nombre + '\')" class="del-btn"><i class="ti ti-trash"></i></div></div>';
+      var avClasses = ['av-neon','av-blue','av-amber']; var currentAv = avClasses[totalRows % 3];
+      var newRow = document.createElement('div'); newRow.className = 'op-row fade-in'; newRow.id = 'row-'+data.nombre;
+      newRow.innerHTML = '<div class="row-ripple"></div><div class="scan-line" id="scan-'+data.nombre+'"></div><div class="op-avatar '+currentAv+'" id="av-'+data.nombre+'">'+data.iniciales+'</div><div><div class="op-name">'+data.nombre+'</div><div class="op-task" id="task-label-'+data.nombre+'"><span class="sdot sdot-idle" id="sdot-'+data.nombre+'"></span><span id="task-txt-'+data.nombre+'">Esperando mando...</span></div><div class="op-via" id="via-'+data.nombre+'">vía: Sistema</div></div><div class="op-stats"><span class="stat-chip stat-ok"><i class="ti ti-check"></i>0</span><span class="stat-chip stat-bad"><i class="ti ti-clock"></i>0</span></div><div><div onclick="eliminarOperadorAjax(\''+data.nombre+'\')" class="del-btn"><i class="ti ti-trash"></i></div></div>';
       container.appendChild(newRow);
-      var opt = document.createElement('option');
-      opt.value = data.nombre; opt.textContent = data.nombre;
+      var opt = document.createElement('option'); opt.value = data.nombre; opt.textContent = data.nombre;
       document.getElementById('dest-select').appendChild(opt);
-    } else {
-      typeConsole('ERROR: ' + data.error);
-    }
+    } else { typeConsole('ERROR: '+data.error); }
   });
 }
-
-/* ═══════════════════════════════════════════
-   ELIMINAR OPERADOR AJAX
-═══════════════════════════════════════════ */
 function eliminarOperadorAjax(nombre) {
-  if (!confirm('¿Desconectar frecuencia de ' + nombre + '?')) return;
-  fetch('/eliminar_usuario_ajax/' + nombre, { method: 'POST' })
+  if (!confirm('¿Desconectar frecuencia de '+nombre+'?')) return;
+  fetch('/eliminar_usuario_ajax/'+nombre, { method: 'POST' })
   .then(function(r){ return r.json(); })
   .then(function(data){
     if (data.success) {
       typeConsole(data.frase);
-      var row = document.getElementById('row-' + nombre);
-      if (row) {
-        row.style.transition = 'opacity 0.35s, transform 0.35s';
-        row.style.opacity = '0';
-        row.style.transform = 'translateX(-20px)';
-        setTimeout(function(){ row.remove(); }, 400);
-      }
-      var opt = document.querySelector('#dest-select option[value="' + nombre + '"]');
-      if (opt) opt.remove();
-    } else {
-      typeConsole('ERROR: ' + data.error);
-    }
+      var row = document.getElementById('row-'+nombre);
+      if (row) { row.style.transition = 'opacity 0.35s,transform 0.35s'; row.style.opacity = '0'; row.style.transform = 'translateX(-20px)'; setTimeout(function(){ row.remove(); }, 400); }
+      var opt = document.querySelector('#dest-select option[value="'+nombre+'"]'); if (opt) opt.remove();
+    } else { typeConsole('ERROR: '+data.error); }
   });
 }
 </script>
