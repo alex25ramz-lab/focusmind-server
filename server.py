@@ -17,8 +17,7 @@ def inicializar_perfil(nombre):
         "enviado_por": "Sistema",
         "historial": [],
         "rendimiento": {"exitos": 0, "retrasos": 0, "total": 0},
-        "ultimo_msj": f"Sistemas LUMINA inicializados para {nombre}.",
-        "_ui_consumida": True
+        "ultimo_msj": f"Sistemas LUMINA inicializados para {nombre}."
     }
 
 def cargar_db():
@@ -54,7 +53,7 @@ FRASES_LUMINA = [
     "Transmisión confirmada. Operador en modo activo."
 ]
 
-# ── ENLACE DIRECTO PARA TU LAPTOP (OBTENER TAREA) ──
+# ── ENLACE DIRECTO PARA LOGIC.PY (GET_DATA CON FORMATO ORIGINAL) ──
 @app.route("/get_data", methods=["GET"])
 def get_data():
     usuario = request.args.get("user", "").strip()
@@ -64,16 +63,14 @@ def get_data():
     db = cargar_db()
     if usuario in db and usuario != "log_global":
         datos_op = db[usuario]["datos"]
-        # Entrega el formato exacto que tu archivo logic.py lee e interpreta
         return jsonify({
             "tarea": datos_op.get("tarea_actual", "Esperando mando..."),
             "tiempo": datos_op.get("tiempo_actual", 0),
-            "id": datos_op.get("id_envio", 0),
-            "_ui_consumida": datos_op.get("_ui_consumida", True)
+            "id": datos_op.get("id_envio", 0)
         })
-    return jsonify({"tarea": "Esperando mando...", "tiempo": 0, "id": 0, "_ui_consumida": True})
+    return jsonify({"tarea": "Esperando mando...", "tiempo": 0, "id": 0})
 
-# ── ENLACE DIRECTO PARA TU LAPTOP (CONFIRMACIÓN ACK) ──
+# ── ENLACE DIRECTO PARA LOGIC.PY (ACK TAREA ORIGINAL) ──
 @app.route("/ack_tarea", methods=["POST"])
 def ack_tarea():
     data = request.get_json() or {}
@@ -84,11 +81,39 @@ def ack_tarea():
         
     db = cargar_db()
     if usuario in db:
-        # Setea que la UI de la laptop ya consumió la tarea para que no repita alertas
-        db[usuario]["datos"]["_ui_consumida"] = True
+        # Aquí puedes resetear el estado o mantenerlo según tu flujo original
         guardar_db(db)
         return jsonify({"success": True})
     return jsonify({"success": False, "error": "Usuario no encontrado"}), 404
+
+# ── ENLACE DIRECTO PARA LOGIC.PY (REPORTAR PROGRESO ORIGINAL) ──
+@app.route("/reportar_progreso", methods=["POST"])
+def reportar_progreso():
+    data = request.get_json() or {}
+    usuario = data.get("user")
+    estado = data.get("estado")
+    tarea_nombre = data.get("tarea_nombre")
+    
+    if not usuario:
+        return jsonify({"success": False, "error": "Faltan datos"}), 400
+        
+    db = cargar_db()
+    if usuario in db:
+        # Sumar al rendimiento según el estado enviado por la interfaz de la laptop
+        if estado == "Misión Cumplida":
+            db[usuario]["datos"]["rendimiento"]["exitos"] += 1
+        elif estado == "Finalizada con Retraso":
+            db[usuario]["datos"]["rendimiento"]["retrasos"] += 1
+            
+        db[usuario]["datos"]["rendimiento"]["total"] += 1
+        # Devolver a estado de espera
+        db[usuario]["datos"]["tarea_actual"] = "Esperando mando..."
+        db[usuario]["datos"]["tiempo_actual"] = 0
+        
+        guardar_db(db)
+        return jsonify({"success": True})
+        
+    return jsonify({"success": False, "error": "Operador no mapeado"}), 404
 
 # ── RUTAS DE LA INTERFAZ WEB ──
 @app.route("/", methods=["GET", "POST"])
@@ -163,7 +188,6 @@ def enviar_tarea_web():
         db[destinatario]["datos"]["id_envio"] = random.randint(1000, 9999)
         db[destinatario]["datos"]["enviado_por"] = session["usuario"]
         db[destinatario]["datos"]["ultimo_msj"] = random.choice(FRASES_LUMINA)
-        db[destinatario]["datos"]["_ui_consumida"] = False  # Informa a la lap que hay nueva tarea
         
         nuevo_log = {
             "usuario": destinatario,
@@ -225,7 +249,7 @@ def logout():
     session.pop("usuario", None)
     return redirect(url_for("login"))
 
-# Templates HTML integrados
+# Templates HTML integrados de Lumina
 HTML_AUTH = """
 <!DOCTYPE html>
 <html lang="es">
