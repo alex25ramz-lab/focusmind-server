@@ -343,94 +343,147 @@ HTML_PANEL = """
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8"><title>LUMINA OS — Panel</title>
+  <meta charset="UTF-8"><title>LUMINA OS — Panel Premium</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Syne:wght@300;400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --neon: #00e5a0; --neon-dim: rgba(0,229,160,0.10); --neon-border: rgba(0,229,160,0.22);
-      --bg: #060708; --card: #0d0e10; --border: rgba(255,255,255,0.065);
+      --neon: #00e5a0; --neon-dim: rgba(0,229,160,0.06); --neon-border: rgba(0,229,160,0.25);
+      --bg: #040506; --card: rgba(13, 15, 18, 0.7); --border: rgba(255,255,255,0.05);
       --red: #ff4f4f; --amber: #f5a623; --muted: #555; --blue: #3b82f6;
+      --glow-shadow: 0 0 20px rgba(0,229,160,0.25);
     }
-    body { background: var(--bg); color: #e0e0e0; font-family: 'Syne', sans-serif; padding: 20px 16px 60px; }
-    body::before { content: ''; position: fixed; inset: 0; background-image: linear-gradient(rgba(0,229,160,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,160,0.025) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; z-index: 0; }
+    
+    /* Fondo animado dinámico */
+    body { background: var(--bg); color: #e0e0e0; font-family: 'Syne', sans-serif; padding: 20px 16px 60px; overflow-x: hidden; }
+    body::before { 
+      content: ''; position: fixed; inset: 0; 
+      background-image: linear-gradient(rgba(0,229,160,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,160,0.015) 1px, transparent 1px); 
+      background-size: 35px 35px; pointer-events: none; z-index: 0;
+      animation: gridPulse 8s ease-in-out infinite alternate;
+    }
+    @keyframes gridPulse { 0% { opacity: 0.6; } 100% { opacity: 1; transform: scale(1.02); } }
+
     .wrap { position: relative; z-index: 1; max-width: 680px; margin: 0 auto; }
     .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-    .session-info { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--neon); letter-spacing: 2px; text-transform: uppercase; font-family: 'Share Tech Mono', monospace; }
-    .dot-live { width: 6px; height: 6px; border-radius: 50%; background: var(--neon); flex-shrink: 0; animation: pulse 1.8s infinite; }
-    .logout-link { font-size: 10px; color: var(--red); text-decoration: none; letter-spacing: 1px; border: 0.5px solid rgba(255,79,79,0.28); padding: 5px 11px; border-radius: 5px; font-family: 'Share Tech Mono', monospace; }
-    .logo h1 { font-family: 'Share Tech Mono', monospace; font-size: 30px; letter-spacing: 12px; color: var(--neon); font-weight: 400; text-align: center; }
-    .logo .sub { font-size: 9px; color: rgba(0,229,160,0.35); letter-spacing: 4px; margin-top: 5px; text-transform: uppercase; text-align: center; margin-bottom: 22px; }
-    .console { background: var(--neon-dim); border-left: 2px solid var(--neon); padding: 13px 16px; border-radius: 0 8px 8px 0; margin-bottom: 20px; display: flex; align-items: flex-start; gap: 10px; }
-    .console .prompt { color: var(--neon); font-family: 'Share Tech Mono', monospace; font-size: 13px; }
-    .console .msg { color: #7fffd4; font-family: 'Share Tech Mono', monospace; font-size: 12px; line-height: 1.6; }
-    .cursor { display: inline-block; width: 7px; height: 13px; background: var(--neon); margin-left: 3px; animation: blink 1s step-end infinite; }
-    .card { background: var(--card); border: 0.5px solid var(--border); border-radius: 16px; padding: 20px 22px; margin-bottom: 16px; position: relative; overflow: hidden; }
-    .card-label { font-size: 9px; color: var(--neon); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; font-family: 'Share Tech Mono', monospace; }
-    .card-label::after { content: ''; flex: 1; height: 0.5px; background: var(--neon-border); }
-    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
-    .form-group { display: flex; flex-direction: column; gap: 5px; }
-    .form-group label { font-size: 9px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
-    select, input[type="text"], input[type="number"] { background: #080909; border: 0.5px solid rgba(255,255,255,0.08); color: #e8e8e8; padding: 10px 13px; border-radius: 8px; font-family: 'Share Tech Mono', monospace; font-size: 13px; outline: none; width: 100%; }
-    .full-field { margin-bottom: 14px; }
-    .deploy-btn { width: 100%; padding: 13px; background: var(--neon); color: #041a0e; font-family: 'Syne', sans-serif; font-weight: 600; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; position: relative; }
-    .btn-bar { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--neon); width: 0%; box-shadow: 0 0 8px rgba(0,229,160,0.6); }
     
-    .op-row { display: grid; grid-template-columns: 40px 1fr auto auto; gap: 14px; align-items: center; padding: 13px 0; border-bottom: 0.5px solid var(--border); position: relative; transition: all 0.4s ease; border-radius: 8px; }
-    .op-avatar { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Share Tech Mono', monospace; font-size: 10px; font-weight: 600; }
-    .av-neon { background: rgba(0,229,160,0.1); color: var(--neon); border: 0.5px solid var(--neon-border); }
-    .av-blue { background: rgba(90,120,255,0.1); color: #8fa8ff; border: 0.5px solid rgba(90,120,255,0.25); }
-    .av-amber { background: rgba(245,166,35,0.1); color: var(--amber); border: 0.5px solid rgba(245,166,35,0.25); }
-    .op-name { font-size: 13px; color: #eee; font-weight: 500; }
-    .op-task { font-size: 10px; color: var(--muted); margin-top: 3px; display: flex; align-items: center; gap: 5px; font-family: 'Share Tech Mono', monospace; }
-    .sdot { width: 5px; height: 5px; border-radius: 50%; }
-    .sdot-active { background: var(--neon); box-shadow: 0 0 5px rgba(0,229,160,0.6); }
+    .session-info { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--neon); letter-spacing: 2px; text-transform: uppercase; font-family: 'Share Tech Mono', monospace; text-shadow: var(--glow-shadow); }
+    .dot-live { width: 7px; height: 7px; border-radius: 50%; background: var(--neon); flex-shrink: 0; animation: pulse 1.4s infinite; box-shadow: 0 0 10px var(--neon); }
+    @keyframes pulse { 0% { transform: scale(0.9); opacity:0.6; } 50% { transform: scale(1.2); opacity:1; } 100% { transform: scale(0.9); opacity:0.6; } }
+    
+    .logout-link { font-size: 10px; color: var(--red); text-decoration: none; letter-spacing: 1px; border: 0.5px solid rgba(255,79,79,0.2); padding: 5px 11px; border-radius: 5px; font-family: 'Share Tech Mono', monospace; transition: all 0.3s cubic-bezier(0.2,1,0.2,1); }
+    .logout-link:hover { background: rgba(255,79,79,0.12); border-color: var(--red); transform: translateY(-1px); box-shadow: 0 0 12px rgba(255,79,79,0.2); }
+    
+    .logo h1 { font-family: 'Share Tech Mono', monospace; font-size: 32px; letter-spacing: 14px; color: var(--neon); font-weight: 400; text-align: center; text-shadow: 0 0 15px rgba(0,229,160,0.3); margin-left: 14px; }
+    .logo .sub { font-size: 9px; color: rgba(0,229,160,0.35); letter-spacing: 4px; margin-top: 5px; text-transform: uppercase; text-align: center; margin-bottom: 22px; }
+    
+    /* Consola con línea láser de escaneo */
+    .console { position: relative; background: var(--neon-dim); border-left: 3px solid var(--neon); padding: 14px 16px; border-radius: 0 10px 10px 0; margin-bottom: 24px; display: flex; align-items: flex-start; gap: 10px; overflow: hidden; box-shadow: inset 0 0 15px rgba(0,229,160,0.03); backdrop-filter: blur(4px); }
+    .console::after {
+      content: ''; position: absolute; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--neon), transparent);
+      animation: scanline 2.5s linear infinite; opacity: 0.4;
+    }
+    @keyframes scanline { 0% { top: -5%; } 100% { top: 105%; } }
+    .console .prompt { color: var(--neon); font-family: 'Share Tech Mono', monospace; font-size: 14px; text-shadow: 0 0 5px var(--neon); }
+    .console .msg { color: #baffeb; font-family: 'Share Tech Mono', monospace; font-size: 12px; line-height: 1.6; }
+    .cursor { display: inline-block; width: 7px; height: 13px; background: var(--neon); margin-left: 3px; animation: blink 0.8s step-end infinite; box-shadow: 0 0 6px var(--neon); }
+    
+    /* Tarjetas Modulares con Efecto Deslizante Estilo Cascada (Stagger) */
+    .card { background: var(--card); border: 0.5px solid var(--border); border-radius: 16px; padding: 22px 24px; margin-bottom: 18px; position: relative; overflow: hidden; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); transition: border-color 0.4s, box-shadow 0.4s, transform 0.4s; }
+    .card:hover { border-color: rgba(0,229,160,0.15); box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 15px rgba(0,229,160,0.02); transform: translateY(-2px); }
+    
+    /* Secuencia de retraso para efecto Cascada WOW */
+    .stagger-1 { animation: cardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.05s; }
+    .stagger-2 { animation: cardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.15s; }
+    .stagger-3 { animation: cardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.25s; }
+    .stagger-4 { animation: cardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.35s; }
+    @keyframes cardEnter { from { opacity: 0; transform: translateY(20px); filter: blur(4px); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }
+
+    .card-label { font-size: 9px; color: var(--neon); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; font-family: 'Share Tech Mono', monospace; text-shadow: 0 0 8px rgba(0,229,160,0.2); }
+    .card-label::after { content: ''; flex: 1; height: 0.5px; background: linear-gradient(90deg, var(--neon-border), transparent); }
+    
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group label { font-size: 9px; color: #666; letter-spacing: 2px; text-transform: uppercase; font-family: 'Share Tech Mono', monospace; }
+    
+    select, input[type="text"], input[type="number"] { background: #070809; border: 0.5px solid rgba(255,255,255,0.07); color: #e8e8e8; padding: 11px 14px; border-radius: 9px; font-family: 'Share Tech Mono', monospace; font-size: 13px; outline: none; width: 100%; transition: all 0.3s; }
+    select:focus, input:focus { border-color: var(--neon); box-shadow: 0 0 10px rgba(0,229,160,0.1); background: #0a0c0e; }
+    .full-field { margin-bottom: 16px; }
+    
+    /* Botones Interactivos de Alta Frecuencia */
+    .deploy-btn { width: 100%; padding: 14px; background: var(--neon); color: #03140b; font-family: 'Syne', sans-serif; font-weight: 600; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; border: none; border-radius: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; position: relative; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); overflow: hidden; box-shadow: 0 4px 15px rgba(0,229,160,0.2); }
+    .deploy-btn:hover { background: #00ffb3; transform: translateY(-1px); box-shadow: 0 6px 22px rgba(0,229,160,0.4); }
+    .deploy-btn:active { transform: translateY(1px); }
+    .deploy-btn::before { content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent); transition: left 0.5s ease; }
+    .deploy-btn:hover::before { left: 100%; }
+
+    /* Estructuras del Monitor */
+    .op-row { display: grid; grid-template-columns: 40px 1fr auto auto; gap: 14px; align-items: center; padding: 12px 10px; border-bottom: 0.5px solid var(--border); border-radius: 8px; transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1); }
+    .op-row:hover { background: rgba(255,255,255,0.02); padding-left: 14px; }
+    .op-avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Share Tech Mono', monospace; font-size: 11px; font-weight: 600; transition: transform 0.3s; }
+    .op-row:hover .op-avatar { transform: scale(1.08) rotate(5deg); }
+    
+    .av-neon { background: rgba(0,229,160,0.08); color: var(--neon); border: 0.5px solid var(--neon-border); box-shadow: 0 0 10px rgba(0,229,160,0.05); }
+    .av-blue { background: rgba(59,130,246,0.08); color: #8fa8ff; border: 0.5px solid rgba(59,130,246,0.2); }
+    .av-amber { background: rgba(245,166,35,0.08); color: var(--amber); border: 0.5px solid rgba(245,166,35,0.2); }
+    
+    .op-name { font-size: 13px; color: #eee; font-weight: 500; letter-spacing: 0.5px; }
+    .op-task { font-size: 10px; color: var(--muted); margin-top: 3px; display: flex; align-items: center; gap: 6px; font-family: 'Share Tech Mono', monospace; }
+    
+    .sdot { width: 6px; height: 6px; border-radius: 50%; transition: all 0.3s; }
+    .sdot-active { background: var(--neon); box-shadow: 0 0 8px var(--neon); animation: pulse 1s infinite; }
     .sdot-idle { background: #333; }
-    .op-via { font-size: 9px; color: #444; margin-top: 2px; }
+    
+    .op-via { font-size: 9px; color: #444; margin-top: 2px; font-family: 'Share Tech Mono', monospace; }
     .op-stats { display: flex; gap: 10px; }
-    .stat-chip { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 3px; font-family: 'Share Tech Mono', monospace; }
+    .stat-chip { font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 3px; font-family: 'Share Tech Mono', monospace; padding: 3px 6px; background: rgba(255,255,255,0.02); border-radius: 4px; }
     .stat-ok { color: var(--neon); }
     .stat-bad { color: var(--red); }
     
-    .del-btn { font-size: 12px; color: rgba(255,79,79,0.5); cursor: pointer; border: 0.5px solid rgba(255,79,79,0.2); padding: 5px 8px; border-radius: 6px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
-    .del-btn:hover { color: var(--red); background: rgba(255,79,79,0.1); border-color: var(--red); }
+    .del-btn { font-size: 12px; color: rgba(255,79,79,0.4); cursor: pointer; border: 0.5px solid rgba(255,79,79,0.15); padding: 5px 8px; border-radius: 6px; transition: all 0.3s; display: flex; align-items: center; justify-content: center; }
+    .del-btn:hover { color: var(--red); background: rgba(255,79,79,0.12); border-color: var(--red); transform: scale(1.05); box-shadow: 0 0 10px rgba(255,79,79,0.15); }
     
-    /* Estilos del Feed de Eventos Compacto */
-    .log-scroll { max-height: 160px; overflow-y: auto; }
-    .log-entry { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 0.5px solid var(--border); font-family: 'Share Tech Mono', monospace; font-size: 12px; }
+    .log-scroll { max-height: 150px; overflow-y: auto; scroll-behavior: smooth; }
+    .log-entry { display: flex; justify-content: space-between; align-items: center; padding: 10px 6px; border-bottom: 0.5px solid var(--border); font-family: 'Share Tech Mono', monospace; font-size: 12px; transition: background 0.2s; }
+    .log-entry:hover { background: rgba(0,229,160,0.02); }
 
-    /* ── ESTILOS EXCLUSIVOS DE LA NUEVA TABLA DE REGISTROS ── */
-    .table-container { width: 100%; overflow-x: auto; margin-top: 5px; }
+    /* Tabla Estructurada Detallada */
+    .table-container { width: 100%; overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-family: 'Share Tech Mono', monospace; font-size: 12px; text-align: left; }
-    th { padding: 11px 10px; color: var(--neon); border-bottom: 1px solid var(--neon-border); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
-    td { padding: 12px 10px; border-bottom: 0.5px solid var(--border); color: #ccc; vertical-align: middle; }
-    tr:hover { background: rgba(255,255,255,0.02); }
+    th { padding: 12px 10px; color: var(--neon); border-bottom: 1px solid var(--neon-border); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+    td { padding: 12px 10px; border-bottom: 0.5px solid var(--border); color: #ccc; transition: color 0.2s; }
+    tr:hover td { color: #fff; }
+    tr { transition: background 0.25s; }
+    tr:hover { background: rgba(255,255,255,0.015); }
     
-    .badge { padding: 3px 7px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase; display: inline-block; }
-    .bg-desplegada { background: rgba(59,130,246,0.15); color: #60a5fa; border: 0.5px solid rgba(59,130,246,0.3); }
-    .bg-ejecucion { background: rgba(245,166,35,0.15); color: #fbbf24; border: 0.5px solid rgba(245,166,35,0.3); }
-    .bg-cumplida { background: rgba(0,229,160,0.15); color: var(--neon); border: 0.5px solid var(--neon-border); }
-    .bg-retraso { background: rgba(255,79,79,0.15); color: #f87171; border: 0.5px solid rgba(255,79,79,0.3); }
+    .badge { padding: 3px 8px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase; display: inline-block; letter-spacing: 0.5px; }
+    .badge-glow { animation: badgePulse 2s infinite alternate; }
+    @keyframes badgePulse { from { filter: drop-shadow(0 0 2px cubic-bezier(0.2,1,0.2,1)); } to { filter: drop-shadow(0 0 6px cubic-bezier(0.2,1,0.2,1)); } }
+    
+    .bg-desplegada { background: rgba(59,130,246,0.12); color: #60a5fa; border: 0.5px solid rgba(59,130,246,0.25); }
+    .bg-ejecucion { background: rgba(245,166,35,0.12); color: #fbbf24; border: 0.5px solid rgba(245,166,35,0.25); }
+    .bg-cumplida { background: rgba(0,229,160,0.12); color: var(--neon); border: 0.5px solid var(--neon-border); }
+    .bg-retraso { background: rgba(255,79,79,0.12); color: #f87171; border: 0.5px solid rgba(255,79,79,0.25); }
 
-    .launch-overlay { position: fixed; inset: 0; z-index: 8000; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; transition: opacity 0.25s; }
-    .launch-overlay.active { opacity: 1; }
-    .launch-box { background: #080d0b; border: 0.5px solid var(--neon-border); border-radius: 16px; padding: 28px 40px; text-align: center; font-family: 'Share Tech Mono', monospace; transform: scale(0.88); transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1); }
-    .launch-overlay.active .launch-box { transform: scale(1); }
-    .launch-title { font-size: 10px; color: rgba(0,229,160,0.5); letter-spacing: 4px; margin-bottom: 10px; }
-    .launch-name { font-size: 22px; color: var(--neon); letter-spacing: 3px; }
+    /* Overlay Cinematográfico de Lanzamiento WOW */
+    .launch-overlay { position: fixed; inset: 0; z-index: 8000; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; background: rgba(4,5,6,0.0); backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px); transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+    .launch-overlay.active { opacity: 1; pointer-events: auto; background: rgba(4,5,6,0.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+    .launch-box { background: #050b08; border: 1px solid var(--neon); border-radius: 20px; padding: 35px 50px; text-align: center; font-family: 'Share Tech Mono', monospace; transform: scale(0.7) cubic-bezier(0.34,1.56,0.64,1); transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.5s; box-shadow: 0 0 0 rgba(0,229,160,0); }
+    .launch-overlay.active .launch-box { transform: scale(1); box-shadow: 0 15px 50px rgba(0,0,0,0.6), 0 0 30px rgba(0,229,160,0.25); }
+    .launch-title { font-size: 10px; color: rgba(0,229,160,0.4); letter-spacing: 5px; margin-bottom: 12px; }
+    .launch-name { font-size: 26px; color: var(--neon); letter-spacing: 4px; text-transform: uppercase; text-shadow: 0 0 12px var(--neon); font-weight: bold; }
     
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-    .fade-in { animation: fadeSlide 0.35s ease both; }
-    @keyframes fadeSlide { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
   </style>
 </head>
 <body>
 
 <div class="launch-overlay" id="launch-overlay">
   <div class="launch-box">
-    <div class="launch-title">MISIÓN ENVIADA A RENDER</div>
+    <div class="launch-title"><i class="ti ti-wifi" class="animation: pulse 1s infinite"></i> TRANSMITIENDO COMPONENTE QUANTUM...</div>
     <div class="launch-name" id="launch-dest">—</div>
   </div>
 </div>
@@ -438,7 +491,7 @@ HTML_PANEL = """
 <div class="wrap">
   <div class="top-bar">
     <div class="session-info"><span class="dot-live"></span>RED EN LA NUBE: {{ usuario }}</div>
-    <a href="/logout" class="logout-link">[ SALIR ]</a>
+    <a href="/logout" class="logout-link">[ DESCONECTAR NODO ]</a>
   </div>
   <div class="logo"><h1>LUMINA OS</h1><div class="sub">Consola de Misiones Globales</div></div>
   
@@ -447,7 +500,7 @@ HTML_PANEL = """
     <span class="msg" id="console-msg">{{ ultimo_msj }}<span class="cursor"></span></span>
   </div>
 
-  <div class="card fade-in">
+  <div class="card stagger-1">
     <div class="card-label"><i class="ti ti-rocket"></i> Desplegar Actividad Global</div>
     <form id="deploy-form" onsubmit="interceptDeploy(event)">
       <div class="form-row">
@@ -469,14 +522,13 @@ HTML_PANEL = """
         <input type="text" name="tarea" id="tarea-input" placeholder="Escribe la actividad técnica..." required>
       </div>
       <button type="submit" class="deploy-btn" id="deploy-btn">
-        <i class="ti ti-player-play"></i>
+        <i class="ti ti-player-play-filled"></i>
         <span>Desplegar misión global</span>
-        <div class="btn-bar" id="btn-bar"></div>
       </button>
     </form>
   </div>
 
-  <div class="card fade-in">
+  <div class="card stagger-2">
     <div class="card-label"><i class="ti ti-radar"></i> Monitor de Operadores</div>
     <div id="operator-rows-container">
       {% set avatares = ['av-neon','av-blue','av-amber'] %}
@@ -510,7 +562,7 @@ HTML_PANEL = """
     </div>
   </div>
 
-  <div class="card fade-in">
+  <div class="card stagger-3">
     <div class="card-label"><i class="ti ti-history"></i> Transmisiones Recientes</div>
     <div class="log-scroll">
       {% if log_global %}
@@ -531,16 +583,16 @@ HTML_PANEL = """
     </div>
   </div>
 
-  <div class="card fade-in">
+  <div class="card stagger-4">
     <div class="card-label"><i class="ti ti-table-share"></i> Tabla de Registro de Actividades (Auditoría Global)</div>
     <div class="table-container">
       <table>
         <thead>
           <tr>
-            <th>Operador (A Quién)</th>
+            <th>Operador</th>
             <th>Actividad Enviada</th>
             <th>Duración</th>
-            <th>Mando Por (Quién)</th>
+            <th>Mando Por</th>
             <th>Estado de Misión</th>
             <th>Fecha / Hora Exacta</th>
           </tr>
@@ -551,13 +603,13 @@ HTML_PANEL = """
             <tr>
               <td style="color: var(--neon); font-weight: bold;">{{ log.usuario }}</td>
               <td>{{ log.tarea }}</td>
-              <td><i class="ti ti-hourglass-high" style="margin-right:3px;"></i>{{ log.tiempo_assigned if log.tiempo_assigned else log.tiempo_asignado }}</td>
+              <td><i class="ti ti-hourglass-high" style="margin-right:3px; color: var(--amber)"></i>{{ log.tiempo_assigned if log.tiempo_assigned else log.tiempo_asignado }}</td>
               <td style="color: #8fa8ff;">{{ log.enviado_por }}</td>
               <td>
                 {% if log.estado == 'Desplegada' %}
                   <span class="badge bg-desplegada">Desplegada</span>
                 {% elif log.estado == 'En ejecución' %}
-                  <span class="badge bg-ejecucion">En ejecución</span>
+                  <span class="badge bg-ejecucion badge-glow">En ejecución</span>
                 {% elif log.estado == 'Misión Cumplida' %}
                   <span class="badge bg-cumplida">Cumplida</span>
                 {% elif log.estado == 'Finalizada con Retraso' %}
@@ -589,8 +641,11 @@ function typeConsole(txt){ document.getElementById('console-msg').textContent = 
 function interceptDeploy(e) {
   e.preventDefault();
   const destUser = document.getElementById('dest-select').value;
-  
   const formData = new FormData(document.getElementById('deploy-form'));
+  
+  // Pequeña animación reactiva en el propio botón al hacer click
+  const btn = document.getElementById('deploy-btn');
+  btn.style.transform = "scale(0.96)";
   
   fetch('/enviar_tarea_web', { method: 'POST', body: formData })
   .then(res => res.json())
@@ -599,16 +654,33 @@ function interceptDeploy(e) {
       const ov = document.getElementById('launch-overlay');
       document.getElementById('launch-dest').textContent = destUser.toUpperCase();
       ov.classList.add('active'); 
-      setTimeout(() => { ov.classList.remove('active'); location.reload(); }, 1100);
+      
+      // Espera cinematográfica antes de actualizar la UI completa
+      setTimeout(() => { 
+        ov.classList.remove('active'); 
+        location.reload(); 
+      }, 1400);
     }
   });
 }
 
 function eliminarOperadorAjax(nombre) {
-  if (!confirm('¿Desconectar operador '+nombre+' de Render?')) return;
-  fetch('/eliminar_usuario_ajax/'+nombre, { method: 'POST' })
-  .then(r => r.json())
-  .then(data => { if(data.success) location.reload(); });
+  if (!confirm('¿Desconectar frecuencia de '+nombre+' de Render?')) return;
+  
+  const row = document.getElementById('row-'+nombre);
+  if (row) {
+    // Animación de salida física fluida WOW antes del borrado duro
+    row.style.transition = 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1)';
+    row.style.opacity = '0';
+    row.style.transform = 'translateX(40px) scale(0.95)';
+    row.style.filter = 'blur(4px)';
+  }
+  
+  setTimeout(() => {
+    fetch('/eliminar_usuario_ajax/'+nombre, { method: 'POST' })
+    .then(r => r.json())
+    .then(data => { if(data.success) location.reload(); });
+  }, 450);
 }
 </script>
 </body>
