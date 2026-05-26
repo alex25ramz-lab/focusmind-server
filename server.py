@@ -418,6 +418,7 @@ HTML_PANEL = """
     .stagger-2 { animation: cardEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.12s; }
     .stagger-3 { animation: cardEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.20s; }
     .stagger-4 { animation: cardEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.28s; }
+    .stagger-5 { animation: cardEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.35s; }
     @keyframes cardEnter { from { opacity: 0; transform: translateY(15px); filter: blur(5px); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }
 
     .card-label { font-size: 9px; color: var(--neon); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; font-family: 'Share Tech Mono', monospace; }
@@ -431,10 +432,13 @@ HTML_PANEL = """
     .form-group label { font-size: 9px; color: #555; letter-spacing: 2px; text-transform: uppercase; font-family: 'Share Tech Mono', monospace; }
 
     /* Botón Súper Cargado */
-    .deploy-btn { width: 100%; padding: 14px; background: var(--neon); color: #020c07; font-family: 'Syne', sans-serif; font-weight: 600; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; border: none; border-radius: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; position: relative; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); overflow: hidden; box-shadow: 0 4px 15px rgba(0,229,160,0.2); }
-    .deploy-btn:hover { background: #00ffb3; transform: translateY(-1px) scale(1.01); box-shadow: 0 8px 25px rgba(0,229,160,0.35); }
-    .deploy-btn::before { content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent); transform: skewX(-25deg); transition: none; animation: lightningSweeper 3.5s infinite linear; }
+    .deploy-btn, .add-btn { width: 100%; padding: 14px; background: var(--neon); color: #020c07; font-family: 'Syne', sans-serif; font-weight: 600; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; border: none; border-radius: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; position: relative; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); overflow: hidden; box-shadow: 0 4px 15px rgba(0,229,160,0.2); }
+    .deploy-btn:hover, .add-btn:hover { background: #00ffb3; transform: translateY(-1px) scale(1.01); box-shadow: 0 8px 25px rgba(0,229,160,0.35); }
+    .deploy-btn::before, .add-btn::before { content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent); transform: skewX(-25deg); animation: lightningSweeper 3.5s infinite linear; }
     @keyframes lightningSweeper { 0% { left: -120%; } 30% { left: 150%; } 100% { left: 150%; } }
+
+    .add-btn { background: transparent; border: 0.5px solid var(--neon-border); color: var(--neon); box-shadow: none; padding: 11px; }
+    .add-btn:hover { background: rgba(0,229,160,0.08); color: #fff; border-color: var(--neon); }
 
     /* Componentes del Monitor con Radar Ondulante Continuo */
     .op-row { display: grid; grid-template-columns: 40px 1fr auto auto; gap: 14px; align-items: center; padding: 12px 10px; border-bottom: 0.5px solid var(--border); border-radius: 8px; transition: all 0.35s cubic-bezier(0.2,1,0.2,1); }
@@ -482,7 +486,6 @@ HTML_PANEL = """
     .bg-desplegada { background: rgba(59,130,246,0.12); color: #60a5fa; border: 0.5px solid rgba(59,130,246,0.25); }
     
     .bg-ejecucion { background: rgba(245,166,35,0.12); color: #fbbf24; border: 0.5px solid rgba(245,166,35,0.25); position: relative; }
-    /* Animación de líneas oblicuas moviéndose solas para simular procesamiento activo */
     .bg-ejecucion::before {
       content: ''; position: absolute; inset: 0; opacity: 0.15;
       background-image: linear-gradient(45deg, #fbbf24 25%, transparent 25%, transparent 50%, #fbbf24 50%, #fbbf24 75%, transparent 75%, transparent);
@@ -508,7 +511,7 @@ HTML_PANEL = """
 
 <div class="launch-overlay" id="launch-overlay">
   <div class="launch-box">
-    <div class="launch-title">&gt;&gt; RED DE DATOS INTERMITENTE: ENVIANDO MANDO_</div>
+    <div class="launch-title">&gt;&gt; RED DE DATOS INTERMITENTE: PROCESANDO CAMBIO EN EL PANEL_</div>
     <div class="launch-name" id="launch-dest">—</div>
   </div>
 </div>
@@ -555,6 +558,20 @@ HTML_PANEL = """
   </div>
 
   <div class="card stagger-2">
+    <div class="card-label"><i class="ti ti-user-plus"></i> Gestión y Control de Frecuencias</div>
+    <form id="add-user-form" onsubmit="agregarOperadorAjax(event)">
+      <div class="form-row" style="grid-template-columns: 1fr auto; items: center; gap: 10px;">
+        <div class="form-group">
+          <input type="text" name="nuevo_usuario" id="new-user-input" placeholder="Nombre o ID del nuevo operador (Ej: operador2)..." required>
+        </div>
+        <button type="submit" class="add-btn">
+          <i class="ti ti-plus"></i> Enlazar Nodo
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card stagger-3">
     <div class="card-label"><i class="ti ti-radar"></i> Monitor de Operadores</div>
     <div id="operator-rows-container">
       {% set avatares = ['av-neon','av-blue'] %}
@@ -591,7 +608,7 @@ HTML_PANEL = """
     </div>
   </div>
 
-  <div class="card stagger-3">
+  <div class="card stagger-4">
     <div class="card-label"><i class="ti ti-history"></i> Transmisiones Recientes</div>
     <div class="log-scroll">
       {% if log_global %}
@@ -612,7 +629,7 @@ HTML_PANEL = """
     </div>
   </div>
 
-  <div class="card stagger-4">
+  <div class="card stagger-5">
     <div class="card-label"><i class="ti ti-table-share"></i> Tabla de Registro de Actividades (Auditoría Global)</div>
     <div class="table-container">
       <table>
@@ -648,3 +665,82 @@ HTML_PANEL = """
                 {% endif %}
               </td>
               <td style="color: #555; font-size: 11px;">{{ log.fecha }}</td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="6" style="text-align: center; color: var(--muted); padding: 30px;">
+                Ninguna actividad registrada en la base de datos central.
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function typeConsole(txt){ document.getElementById('console-msg').textContent = txt; }
+
+function interceptDeploy(e) {
+  e.preventDefault();
+  const destUser = document.getElementById('dest-select').value;
+  const formData = new FormData(document.getElementById('deploy-form'));
+  
+  const btn = document.getElementById('deploy-btn');
+  btn.style.transform = "scale(0.95)";
+  
+  fetch('/enviar_tarea_web', { method: 'POST', body: formData })
+  .then(res => res.json())
+  .then(data => {
+    if(data.success) {
+      const ov = document.getElementById('launch-overlay');
+      document.getElementById('launch-dest').textContent = "DESPLEGANDO A " + destUser.toUpperCase();
+      ov.classList.add('active'); 
+      setTimeout(() => { ov.classList.remove('active'); location.reload(); }, 1100);
+    }
+  });
+}
+
+function agregarOperadorAjax(e) {
+  e.preventDefault();
+  const input = document.getElementById('new-user-input');
+  const nombre = input.value.trim();
+  const formData = new FormData(document.getElementById('add-user-form'));
+
+  fetch('/agregar_usuario_ajax', { method: 'POST', body: formData })
+  .then(res => res.json())
+  .then(data => {
+    if(data.success) {
+      const ov = document.getElementById('launch-overlay');
+      document.getElementById('launch-dest').textContent = "AÑADIENDO NODO: " + nombre.toUpperCase();
+      ov.classList.add('active'); 
+      setTimeout(() => { ov.classList.remove('active'); location.reload(); }, 1100);
+    } else {
+      alert("Error del sistema central: " + data.error);
+    }
+  });
+}
+
+function eliminarOperadorAjax(nombre) {
+  if (!confirm('¿Interrumpir el canal cuántico de '+nombre+'?')) return;
+  
+  const row = document.getElementById('row-'+nombre);
+  if (row) {
+    row.style.transition = 'all 0.5s cubic-bezier(0.76, 0, 0.24, 1)';
+    row.style.opacity = '0';
+    row.style.transform = 'scaleY(0) translateX(-50px)';
+    row.style.background = 'rgba(255,79,79,0.1)';
+  }
+  
+  setTimeout(() => {
+    fetch('/eliminar_usuario_ajax/'+nombre, { method: 'POST' })
+    .then(r => r.json())
+    .then(data => { if(data.success) location.reload(); });
+  }, 450);
+}
+</script>
+</body>
+</html>
