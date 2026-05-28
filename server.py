@@ -7,7 +7,6 @@ import json
 app = Flask(__name__)
 app.secret_key = "lumina_proto_2026_key_ultra_secure"
 
-# En Render, se usará una ruta local temporal para guardar la sesión si es necesario
 DB_FILE = "/tmp/database.json" if os.environ.get("RENDER") else "database.json"
 
 def inicializar_perfil(nombre):
@@ -19,7 +18,7 @@ def inicializar_perfil(nombre):
         "historial": [],
         "rendimiento": {"exitos": 0, "retrasos": 0, "total": 0},
         "ultimo_msj": f"Sistemas LUMINA inicializados para {nombre}.",
-        "_ui_consumida": True  # Asegura el estado limpio inicial
+        "_ui_consumida": True
     }
 
 def cargar_db():
@@ -62,18 +61,11 @@ def get_data():
     usuario = request.args.get("user", "").strip()
     if not usuario:
         return jsonify({"error": "Usuario requerido"}), 400
-        
     db = cargar_db()
     if usuario in db and usuario != "log_global":
         datos_op = db[usuario]["datos"]
-        
         if datos_op.get("_ui_consumida", False):
-            return jsonify({
-                "tarea": "Esperando mando...",
-                "tiempo": 0,
-                "id": 0
-            })
-            
+            return jsonify({"tarea": "Esperando mando...", "tiempo": 0, "id": 0})
         return jsonify({
             "tarea": datos_op.get("tarea_actual", "Esperando mando..."),
             "tiempo": datos_op.get("tiempo_actual", 0),
@@ -87,15 +79,12 @@ def ack_tarea():
     data = request.get_json() or {}
     usuario = data.get("user")
     id_tarea = data.get("id")
-    
     if not usuario:
         return jsonify({"success": False, "error": "Datos inválidos"}), 400
-        
     db = cargar_db()
     if usuario in db:
         if db[usuario]["datos"].get("id_envio") == id_tarea:
             db[usuario]["datos"]["_ui_consumida"] = True
-            
             for log in db.get("log_global", []):
                 if log.get("id_mision") == id_tarea:
                     log["estado"] = "En ejecución"
@@ -111,31 +100,24 @@ def reportar_progreso():
     usuario = data.get("user")
     estado = data.get("estado")
     id_tarea = data.get("id")
-    
     if not usuario:
         return jsonify({"success": False, "error": "Faltan datos de usuario"}), 400
-        
     db = cargar_db()
     if usuario in db:
         if estado == "Misión Cumplida":
             db[usuario]["datos"]["rendimiento"]["exitos"] += 1
         elif estado == "Finalizada con Retraso":
             db[usuario]["datos"]["rendimiento"]["retrasos"] += 1
-            
         db[usuario]["datos"]["rendimiento"]["total"] += 1
-        
         for log in db.get("log_global", []):
             if log.get("id_mision") == id_tarea or (log.get("usuario") == usuario and log.get("estado") in ["Desplegada", "En ejecución"]):
                 log["estado"] = estado
                 break
-        
         db[usuario]["datos"]["tarea_actual"] = "Esperando mando..."
         db[usuario]["datos"]["tiempo_actual"] = 0
         db[usuario]["datos"]["_ui_consumida"] = True
-        
         guardar_db(db)
         return jsonify({"success": True})
-        
     return jsonify({"success": False, "error": "Operador no registrado"}), 404
 
 
@@ -149,11 +131,9 @@ def login():
     if request.method == "POST":
         usuario = request.form.get("usuario", "").strip()
         password = request.form.get("password", "").strip()
-        
         if not usuario:
             error = "El identificador no puede estar vacío."
             return render_template_string(HTML_AUTH, error=error)
-            
         db = cargar_db()
         if usuario in db and usuario != "log_global":
             if db[usuario]["password"] == password:
@@ -166,7 +146,6 @@ def login():
             guardar_db(db)
             session["usuario"] = usuario
             return redirect(url_for("panel"))
-            
     return render_template_string(HTML_AUTH, error=error)
 
 
@@ -174,24 +153,20 @@ def login():
 def panel():
     if "usuario" not in session:
         return redirect(url_for("login"))
-    
     db = cargar_db()
     usuario_actual = session["usuario"]
-    
     if usuario_actual not in db:
         db[usuario_actual] = {"password": "", "datos": inicializar_perfil(usuario_actual)}
         guardar_db(db)
-        
     ultimo_msj = db[usuario_actual]["datos"].get("ultimo_msj", "Sistemas listos.")
     lista_usuarios = [k for k in db.keys() if k != "log_global"]
     log_global = db.get("log_global", [])
-    
     return render_template_string(
-        HTML_PANEL, 
-        usuario=usuario_actual, 
-        ultimo_msj=ultimo_msj, 
-        equipo=db, 
-        lista_usuarios=lista_usuarios, 
+        HTML_PANEL,
+        usuario=usuario_actual,
+        ultimo_msj=ultimo_msj,
+        equipo=db,
+        lista_usuarios=lista_usuarios,
         log_global=log_global
     )
 
@@ -200,25 +175,20 @@ def panel():
 def enviar_tarea_web():
     if "usuario" not in session:
         return jsonify({"success": False, "error": "Sesión caducada"}), 403
-        
     destinatario = request.form.get("destinatario")
     mins = request.form.get("mins")
     tarea = request.form.get("tarea")
-    
     if not destinatario or not mins or not tarea:
         return jsonify({"success": False, "error": "Campos incompletos"}), 400
-        
     db = cargar_db()
     if destinatario in db and destinatario != "log_global":
         id_mision_generada = random.randint(1000, 9999)
-        
         db[destinatario]["datos"]["tarea_actual"] = tarea
         db[destinatario]["datos"]["tiempo_actual"] = int(mins)
         db[destinatario]["datos"]["id_envio"] = id_mision_generada
         db[destinatario]["datos"]["enviado_por"] = session["usuario"]
         db[destinatario]["datos"]["ultimo_msj"] = random.choice(FRASES_LUMINA)
-        db[destinatario]["datos"]["_ui_consumida"] = False  
-
+        db[destinatario]["datos"]["_ui_consumida"] = False
         nuevo_log = {
             "id_mision": id_mision_generada,
             "usuario": destinatario,
@@ -231,10 +201,8 @@ def enviar_tarea_web():
         if "log_global" not in db:
             db["log_global"] = []
         db["log_global"].append(nuevo_log)
-        
         guardar_db(db)
         return jsonify({"success": True, "frase": db[destinatario]["datos"]["ultimo_msj"]})
-        
     return jsonify({"success": False, "error": "El destino no existe"}), 400
 
 
@@ -242,23 +210,57 @@ def enviar_tarea_web():
 def agregar_usuario_ajax():
     if "usuario" not in session:
         return jsonify({"success": False, "error": "Sesión caducada"}), 403
-    
     nuevo_op = request.form.get("nuevo_usuario", "").strip()
     if not nuevo_op or nuevo_op == "log_global":
         return jsonify({"success": False, "error": "ID Inválido"}), 400
-        
     db = cargar_db()
     if nuevo_op in db:
         return jsonify({"success": False, "error": "El operador ya se encuentra registrado"}), 400
-        
     db[nuevo_op] = {"password": "", "datos": inicializar_perfil(nuevo_op)}
     guardar_db(db)
-    
     return jsonify({
-        "success": True, 
+        "success": True,
         "nombre": nuevo_op,
         "iniciales": nuevo_op[:2].upper(),
         "frase": f"Enlace establecido. {nuevo_op} se ha unido a la red Lumina."
+    })
+
+
+# ── NUEVO ENDPOINT: IMPORTAR LISTA DE OPERADORES ──
+
+@app.route("/importar_operadores", methods=["POST"])
+def importar_operadores():
+    if "usuario" not in session:
+        return jsonify({"success": False, "error": "Sesión caducada"}), 403
+
+    lista_raw = request.form.get("lista_operadores", "")
+    # Acepta separados por coma, punto y coma, salto de línea o combinaciones
+    separadores = lista_raw.replace(",", "\n").replace(";", "\n")
+    nombres = [n.strip() for n in separadores.splitlines() if n.strip()]
+
+    if not nombres:
+        return jsonify({"success": False, "error": "La lista está vacía"}), 400
+
+    db = cargar_db()
+    agregados = []
+    omitidos = []
+
+    for nombre in nombres:
+        if nombre == "log_global" or len(nombre) > 40:
+            omitidos.append(nombre)
+            continue
+        if nombre in db:
+            omitidos.append(nombre)
+        else:
+            db[nombre] = {"password": "", "datos": inicializar_perfil(nombre)}
+            agregados.append(nombre)
+
+    guardar_db(db)
+    return jsonify({
+        "success": True,
+        "agregados": agregados,
+        "omitidos": omitidos,
+        "total": len(agregados)
     })
 
 
@@ -266,16 +268,13 @@ def agregar_usuario_ajax():
 def eliminar_usuario_ajax(nombre):
     if "usuario" not in session:
         return jsonify({"success": False, "error": "Sesión caducada"}), 403
-    
     if nombre == "operador1":
         return jsonify({"success": False, "error": "No se puede dar de baja al nodo troncal maestro"}), 400
-        
     db = cargar_db()
     if nombre in db:
         del db[nombre]
         guardar_db(db)
         return jsonify({"success": True, "frase": f"Enlace cerrado. {nombre} desconectado de la red."})
-        
     return jsonify({"success": False, "error": "Operador no localizado"}), 404
 
 
@@ -339,6 +338,7 @@ HTML_AUTH = """
 </html>
 """
 
+
 HTML_PANEL = """
 <!DOCTYPE html>
 <html lang="es">
@@ -354,8 +354,6 @@ HTML_PANEL = """
       --bg: #030405; --card: rgba(11, 13, 16, 0.75); --border: rgba(255,255,255,0.04);
       --red: #ff4f4f; --amber: #f5a623; --muted: #4e5256; --blue: #3b82f6;
     }
-    
-    /* Fondo con Interferencia CRT Continua y Matriz de Red */
     body { background: var(--bg); color: #e0e0e0; font-family: 'Syne', sans-serif; padding: 20px 16px 60px; overflow-x: hidden; position: relative; }
     body::before { 
       content: ''; position: fixed; inset: 0; 
@@ -380,7 +378,6 @@ HTML_PANEL = """
     .logout-link { font-size: 10px; color: var(--red); text-decoration: none; letter-spacing: 1px; border: 0.5px solid rgba(255,79,79,0.2); padding: 5px 11px; border-radius: 5px; font-family: 'Share Tech Mono', monospace; transition: all 0.3s; }
     .logout-link:hover { background: rgba(255,79,79,0.15); border-color: var(--red); box-shadow: 0 0 10px rgba(255,79,79,0.2); }
     
-    /* Efecto Glitch continuo en el Título */
     .logo h1 { font-family: 'Share Tech Mono', monospace; font-size: 34px; letter-spacing: 14px; color: var(--neon); font-weight: 400; text-align: center; position: relative; animation: glitchText 4s linear infinite; margin-left: 14px; }
     @keyframes glitchText {
       0%, 95%, 100% { text-shadow: 0 0 10px rgba(0,229,160,0.3); }
@@ -390,7 +387,6 @@ HTML_PANEL = """
     }
     .logo .sub { font-size: 9px; color: rgba(0,229,160,0.35); letter-spacing: 4px; margin-top: 5px; text-transform: uppercase; text-align: center; margin-bottom: 22px; }
     
-    /* Consola Dinámica Inteligente */
     .console { position: relative; background: var(--neon-dim); border-left: 3px solid var(--neon); padding: 14px 16px; border-radius: 0 10px 10px 0; margin-bottom: 24px; display: flex; align-items: flex-start; gap: 10px; overflow: hidden; backdrop-filter: blur(4px); }
     .console::after {
       content: ''; position: absolute; left: 0; right: 0; height: 100%; top: -100%;
@@ -403,7 +399,6 @@ HTML_PANEL = """
     .console .msg { color: #baffeb; font-family: 'Share Tech Mono', monospace; font-size: 12px; line-height: 1.6; }
     .cursor { display: inline-block; width: 7px; height: 13px; background: var(--neon); margin-left: 3px; animation: blink 0.8s step-end infinite; box-shadow: 0 0 6px var(--neon); }
     
-    /* Tarjetas Modulares con Escaneo Perimetral */
     .card { background: var(--card); border: 0.5px solid var(--border); border-radius: 16px; padding: 22px 24px; margin-bottom: 18px; position: relative; overflow: hidden; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
     .card::before {
       content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 1px;
@@ -413,12 +408,12 @@ HTML_PANEL = """
     @keyframes borderWave { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
     .card:hover { border-color: rgba(0,229,160,0.22); box-shadow: 0 12px 35px rgba(0,0,0,0.5), inset 0 0 15px rgba(0,229,160,0.02); transform: scale(1.005) translateY(-1px); }
     
-    /* Entrada Kinetic Cascade */
     .stagger-1 { animation: cardEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.05s; }
     .stagger-2 { animation: cardEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.12s; }
     .stagger-3 { animation: cardEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.20s; }
     .stagger-4 { animation: cardEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.28s; }
     .stagger-5 { animation: cardEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.35s; }
+    .stagger-6 { animation: cardEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.42s; }
     @keyframes cardEnter { from { opacity: 0; transform: translateY(15px); filter: blur(5px); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }
 
     .card-label { font-size: 9px; color: var(--neon); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; font-family: 'Share Tech Mono', monospace; }
@@ -426,21 +421,39 @@ HTML_PANEL = """
     
     select, input[type="text"], input[type="number"] { background: #060708; border: 0.5px solid rgba(255,255,255,0.06); color: #e8e8e8; padding: 11px 14px; border-radius: 9px; font-family: 'Share Tech Mono', monospace; font-size: 13px; outline: none; width: 100%; transition: all 0.3s; }
     select:focus, input:focus { border-color: var(--neon); box-shadow: 0 0 12px rgba(0,229,160,0.15); background: #090a0c; }
+
+    textarea.lumina-textarea {
+      background: #060708; border: 0.5px solid rgba(255,255,255,0.06); color: #e8e8e8;
+      padding: 11px 14px; border-radius: 9px; font-family: 'Share Tech Mono', monospace;
+      font-size: 12px; outline: none; width: 100%; transition: all 0.3s;
+      resize: vertical; min-height: 100px; line-height: 1.7;
+    }
+    textarea.lumina-textarea:focus { border-color: var(--neon); box-shadow: 0 0 12px rgba(0,229,160,0.15); background: #090a0c; }
+    textarea.lumina-textarea::placeholder { color: #333; }
+
+    /* Resultado de importación */
+    .import-result { margin-top: 14px; padding: 12px 14px; border-radius: 9px; font-family: 'Share Tech Mono', monospace; font-size: 11px; line-height: 1.8; display: none; }
+    .import-result.show { display: block; }
+    .import-ok { background: rgba(0,229,160,0.06); border: 0.5px solid var(--neon-border); color: #baffeb; }
+    .import-warn { background: rgba(245,166,35,0.06); border: 0.5px solid rgba(245,166,35,0.3); color: #fbbf24; }
+    .tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .tag { padding: 2px 8px; border-radius: 4px; font-size: 10px; background: rgba(0,229,160,0.1); color: var(--neon); border: 0.5px solid var(--neon-border); }
+    .tag-skip { background: rgba(255,79,79,0.08); color: #f87171; border-color: rgba(255,79,79,0.2); }
     
     .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
     .form-group { display: flex; flex-direction: column; gap: 6px; }
     .form-group label { font-size: 9px; color: #555; letter-spacing: 2px; text-transform: uppercase; font-family: 'Share Tech Mono', monospace; }
 
-    /* Botones de Comando */
-    .deploy-btn, .add-btn { width: 100%; padding: 14px; background: var(--neon); color: #020c07; font-family: 'Syne', sans-serif; font-weight: 600; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; border: none; border-radius: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; position: relative; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); overflow: hidden; box-shadow: 0 4px 15px rgba(0,229,160,0.2); }
-    .deploy-btn:hover, .add-btn:hover { background: #00ffb3; transform: translateY(-1px) scale(1.01); box-shadow: 0 8px 25px rgba(0,229,160,0.35); }
-    .deploy-btn::before, .add-btn::before { content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent); transform: skewX(-25deg); animation: lightningSweeper 3.5s infinite linear; }
+    .deploy-btn, .add-btn, .import-btn { width: 100%; padding: 14px; background: var(--neon); color: #020c07; font-family: 'Syne', sans-serif; font-weight: 600; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; border: none; border-radius: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; position: relative; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); overflow: hidden; box-shadow: 0 4px 15px rgba(0,229,160,0.2); }
+    .deploy-btn:hover, .add-btn:hover, .import-btn:hover { background: #00ffb3; transform: translateY(-1px) scale(1.01); box-shadow: 0 8px 25px rgba(0,229,160,0.35); }
+    .deploy-btn::before, .add-btn::before, .import-btn::before { content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent); transform: skewX(-25deg); animation: lightningSweeper 3.5s infinite linear; }
     @keyframes lightningSweeper { 0% { left: -120%; } 30% { left: 150%; } 100% { left: 150%; } }
 
     .add-btn { background: transparent; border: 0.5px solid var(--neon-border); color: var(--neon); box-shadow: none; padding: 11px; width: auto; min-width: 150px; }
     .add-btn:hover { background: rgba(0,229,160,0.08); color: #fff; border-color: var(--neon); }
+    .import-btn { background: rgba(0,229,160,0.1); color: var(--neon); border: 0.5px solid var(--neon-border); box-shadow: none; margin-top: 12px; }
+    .import-btn:hover { background: rgba(0,229,160,0.18); }
 
-    /* Componentes del Monitor con Radar Ondulante Continuo */
     .op-row { display: grid; grid-template-columns: 40px 1fr auto auto; gap: 14px; align-items: center; padding: 12px 10px; border-bottom: 0.5px solid var(--border); border-radius: 8px; transition: all 0.35s cubic-bezier(0.2,1,0.2,1); position: relative; }
     .op-row:hover { background: rgba(0,229,160,0.02); padding-left: 15px; }
     
@@ -449,7 +462,6 @@ HTML_PANEL = """
     .av-neon { background: #05140f; color: var(--neon); border: 0.5px solid var(--neon-border); }
     .av-blue { background: #050a14; color: #8fa8ff; border: 0.5px solid rgba(59,130,246,0.2); }
     
-    /* Ondas de radar infinitas para operadores activos */
     .row-active-pulse::before {
       content: ''; position: absolute; inset: -4px; border-radius: 50%;
       box-shadow: 0 0 0 1.5px var(--neon); animation: radarRing 2s infinite cubic-bezier(0.16, 1, 0.3, 1); z-index: 1;
@@ -473,7 +485,6 @@ HTML_PANEL = """
     .log-scroll { max-height: 140px; overflow-y: auto; }
     .log-entry { display: flex; justify-content: space-between; align-items: center; padding: 10px 6px; border-bottom: 0.5px solid var(--border); font-family: 'Share Tech Mono', monospace; font-size: 12px; }
 
-    /* Tabla de Registros Animada en Vivo */
     .table-container { width: 100%; overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-family: 'Share Tech Mono', monospace; font-size: 12px; }
     th { padding: 12px 10px; color: var(--neon); border-bottom: 1px solid var(--neon-border); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; text-align: left; }
@@ -481,10 +492,8 @@ HTML_PANEL = """
     tr { transition: background 0.2s; }
     tr:hover { background: rgba(255,255,255,0.015); }
     
-    /* Barras de Estado en Carga Infinita */
     .badge { padding: 3px 8px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase; position: relative; overflow: hidden; display: inline-block; }
     .bg-desplegada { background: rgba(59,130,246,0.12); color: #60a5fa; border: 0.5px solid rgba(59,130,246,0.25); }
-    
     .bg-ejecucion { background: rgba(245,166,35,0.12); color: #fbbf24; border: 0.5px solid rgba(245,166,35,0.25); position: relative; }
     .bg-ejecucion::before {
       content: ''; position: absolute; inset: 0; opacity: 0.15;
@@ -492,11 +501,9 @@ HTML_PANEL = """
       background-size: 10px 10px; animation: progressStripes 1s linear infinite;
     }
     @keyframes progressStripes { from { background-position: 0 0; } to { background-position: 10px 0; } }
-    
     .bg-cumplida { background: rgba(0,229,160,0.1); color: var(--neon); border: 0.5px solid var(--neon-border); box-shadow: 0 0 8px rgba(0,229,160,0.15); }
     .bg-retraso { background: rgba(255,79,79,0.12); color: #f87171; border: 0.5px solid rgba(255,79,79,0.25); }
 
-    /* Overlay Cuántico de Lanzamiento */
     .launch-overlay { position: fixed; inset: 0; z-index: 8000; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px); transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
     .launch-overlay.active { opacity: 1; pointer-events: auto; background: rgba(3,4,5,0.65); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
     .launch-box { background: #030806; border: 1px solid var(--neon); border-radius: 20px; padding: 35px 50px; text-align: center; font-family: 'Share Tech Mono', monospace; transform: scale(0.6); transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 0 40px rgba(0,229,160,0.3); }
@@ -557,8 +564,9 @@ HTML_PANEL = """
     </form>
   </div>
 
+  <!-- CARD GESTIÓN INDIVIDUAL -->
   <div class="card stagger-2">
-    <div class="card-label"><i class="ti ti-user-plus"></i> Gestión y Control de Frecuencias</div>
+    <div class="card-label"><i class="ti ti-user-plus"></i> Enlazar Nodo Individual</div>
     <form id="add-user-form" onsubmit="agregarOperadorAjax(event)">
       <div class="form-row" style="grid-template-columns: 1fr auto; align-items: center; gap: 12px; margin-bottom: 0;">
         <div class="form-group">
@@ -571,7 +579,20 @@ HTML_PANEL = """
     </form>
   </div>
 
+  <!-- NUEVA CARD: IMPORTAR LISTA DE OPERADORES -->
   <div class="card stagger-3">
+    <div class="card-label"><i class="ti ti-upload"></i> Importar Lista de Operadores</div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label>Lista de IDs — uno por línea o separados por coma / punto y coma</label>
+      <textarea class="lumina-textarea" id="import-textarea" placeholder="operador2&#10;operador3&#10;operador4&#10;&#10;o bien: operador2, operador3, operador4"></textarea>
+    </div>
+    <button class="import-btn" onclick="importarOperadores()">
+      <i class="ti ti-users-plus"></i>&nbsp; Registrar todos en la red
+    </button>
+    <div class="import-result" id="import-result"></div>
+  </div>
+
+  <div class="card stagger-4">
     <div class="card-label"><i class="ti ti-radar"></i> Monitor de Operadores</div>
     <div id="operator-rows-container">
       {% set avatares = ['av-neon','av-blue'] %}
@@ -608,7 +629,7 @@ HTML_PANEL = """
     </div>
   </div>
 
-  <div class="card stagger-4">
+  <div class="card stagger-5">
     <div class="card-label"><i class="ti ti-history"></i> Transmisiones Recientes</div>
     <div class="log-scroll">
       {% if log_global %}
@@ -629,7 +650,7 @@ HTML_PANEL = """
     </div>
   </div>
 
-  <div class="card stagger-5">
+  <div class="card stagger-6">
     <div class="card-label"><i class="ti ti-table-share"></i> Tabla de Registro de Actividades (Auditoría Global)</div>
     <div class="table-container">
       <table>
@@ -686,18 +707,14 @@ function interceptDeploy(e) {
   e.preventDefault();
   const destUser = document.getElementById('dest-select').value;
   const formData = new FormData(document.getElementById('deploy-form'));
-  
   const btn = document.getElementById('deploy-btn');
   btn.style.transform = "scale(0.95)";
-  
   fetch('/enviar_tarea_web', { method: 'POST', body: formData })
   .then(res => res.json())
   .then(data => {
     if(data.success) {
-      const ov = document.getElementById('launch-overlay');
-      document.getElementById('launch-dest').textContent = "DESPLEGANDO A " + destUser.toUpperCase();
-      ov.classList.add('active'); 
-      setTimeout(() => { ov.classList.remove('active'); location.reload(); }, 1100);
+      showOverlay("DESPLEGANDO A " + destUser.toUpperCase());
+      setTimeout(() => { hideOverlay(); location.reload(); }, 1100);
     }
   });
 }
@@ -707,25 +724,58 @@ function agregarOperadorAjax(e) {
   const input = document.getElementById('new-user-input');
   const nombre = input.value.trim();
   const formData = new FormData(document.getElementById('add-user-form'));
-
   fetch('/agregar_usuario_ajax', { method: 'POST', body: formData })
   .then(res => res.json())
   .then(data => {
     if(data.success) {
-      const ov = document.getElementById('launch-overlay');
-      document.getElementById('launch-dest').textContent = "VÍNCULO COMPLETADO: " + nombre.toUpperCase();
-      ov.classList.add('active'); 
-      // FIX: Asegura refrescar la ventana tras guardar con éxito para reconstruir el selector y la lista
-      setTimeout(() => { ov.classList.remove('active'); location.reload(); }, 1100);
+      showOverlay("VÍNCULO COMPLETADO: " + nombre.toUpperCase());
+      setTimeout(() => { hideOverlay(); location.reload(); }, 1100);
     } else {
       alert("Error del sistema central: " + data.error);
     }
   });
 }
 
+function importarOperadores() {
+  const texto = document.getElementById('import-textarea').value.trim();
+  if (!texto) { alert("La lista está vacía."); return; }
+
+  const formData = new FormData();
+  formData.append('lista_operadores', texto);
+
+  const resultDiv = document.getElementById('import-result');
+  resultDiv.className = 'import-result show import-ok';
+  resultDiv.innerHTML = '<i class="ti ti-loader-2"></i> Procesando transmisión masiva...';
+
+  fetch('/importar_operadores', { method: 'POST', body: formData })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      let html = '';
+      if (data.total > 0) {
+        html += '<b style="color:var(--neon)"><i class="ti ti-check"></i> ' + data.total + ' operador(es) registrado(s):</b>';
+        html += '<div class="tag-list">' + data.agregados.map(n => '<span class="tag">' + n + '</span>').join('') + '</div>';
+      }
+      if (data.omitidos.length > 0) {
+        html += '<div style="margin-top:8px;color:#f87171"><i class="ti ti-alert-triangle"></i> ' + data.omitidos.length + ' omitido(s) (ya existen o ID inválido):</div>';
+        html += '<div class="tag-list">' + data.omitidos.map(n => '<span class="tag tag-skip">' + n + '</span>').join('') + '</div>';
+      }
+      resultDiv.className = 'import-result show ' + (data.omitidos.length > 0 && data.total === 0 ? 'import-warn' : 'import-ok');
+      resultDiv.innerHTML = html;
+
+      if (data.total > 0) {
+        showOverlay(data.total + " NODOS ENLAZADOS A LA RED");
+        setTimeout(() => { hideOverlay(); location.reload(); }, 1400);
+      }
+    } else {
+      resultDiv.className = 'import-result show import-warn';
+      resultDiv.innerHTML = '<i class="ti ti-alert-circle"></i> ' + data.error;
+    }
+  });
+}
+
 function eliminarOperadorAjax(nombre) {
   if (!confirm('¿Interrumpir el canal cuántico de '+nombre+'?')) return;
-  
   const row = document.getElementById('row-'+nombre);
   if (row) {
     row.style.transition = 'all 0.5s cubic-bezier(0.76, 0, 0.24, 1)';
@@ -733,13 +783,25 @@ function eliminarOperadorAjax(nombre) {
     row.style.transform = 'scaleY(0) translateX(-50px)';
     row.style.background = 'rgba(255,79,79,0.1)';
   }
-  
   setTimeout(() => {
     fetch('/eliminar_usuario_ajax/'+nombre, { method: 'POST' })
     .then(r => r.json())
     .then(data => { if(data.success) location.reload(); });
   }, 450);
 }
+
+function showOverlay(texto) {
+  const ov = document.getElementById('launch-overlay');
+  document.getElementById('launch-dest').textContent = texto;
+  ov.classList.add('active');
+}
+function hideOverlay() {
+  document.getElementById('launch-overlay').classList.remove('active');
+}
 </script>
 </body>
 </html>
+"""
+
+if __name__ == "__main__":
+    app.run(debug=True)
