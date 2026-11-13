@@ -3,6 +3,7 @@ from datetime import datetime
 import os
 import random
 import json
+import time
 
 app = Flask(__name__)
 app.secret_key = "lumina_proto_2026_key_ultra_secure"
@@ -54,6 +55,43 @@ FRASES_LUMINA = [
     "Transmisión confirmada. Operador en modo activo."
 ]
 
+# ── PRESENCIA Y RANKING ──
+# La presencia vive en memoria: cada consulta de la app a /get_data cuenta como "latido".
+PRESENCIA = {}
+VENTANA_EN_LINEA = 35  # segundos sin consultar antes de marcar al operador como desconectado
+PUNTOS_A_TIEMPO = 100
+PUNTOS_CON_RETRASO = 40
+
+def en_linea(nombre):
+    p = PRESENCIA.get(nombre)
+    return bool(p and time.time() - p["t"] <= VENTANA_EN_LINEA)
+
+def estado_operador(nombre):
+    if not en_linea(nombre):
+        return "desconectado"
+    return PRESENCIA[nombre].get("estado") or "libre"
+
+def calcular_ranking(db):
+    filas = []
+    for nombre, info in db.items():
+        if nombre == "log_global":
+            continue
+        r = info.get("datos", {}).get("rendimiento", {})
+        exitos, retrasos = r.get("exitos", 0), r.get("retrasos", 0)
+        total = exitos + retrasos
+        filas.append({
+            "nombre": nombre,
+            "exitos": exitos,
+            "retrasos": retrasos,
+            "total": total,
+            "puntualidad": round(100 * exitos / total) if total else None,
+            "puntos": exitos * PUNTOS_A_TIEMPO + retrasos * PUNTOS_CON_RETRASO,
+            "en_linea": en_linea(nombre),
+            "estado": estado_operador(nombre),
+        })
+    filas.sort(key=lambda f: (-f["puntos"], -(f["puntualidad"] or 0), f["nombre"]))
+    return filas
+
 # ── ENDPOINTS DE COMUNICACIÓN CON LA LAPTOP (LOGIC.PY) ──
 
 @app.route("/get_data", methods=["GET"])
@@ -64,6 +102,7 @@ def get_data():
     db = cargar_db()
     if usuario in db and usuario != "log_global":
         datos_op = db[usuario]["datos"]
+        PRESENCIA[usuario] = {"t": time.time(), "estado": request.args.get("estado", "libre")[:20]}
         if datos_op.get("_ui_consumida", False):
             return jsonify({"tarea": "Esperando mando...", "tiempo": 0, "id": 0})
         return jsonify({
@@ -121,6 +160,25 @@ def reportar_progreso():
     return jsonify({"success": False, "error": "Operador no registrado"}), 404
 
 
+@app.route("/get_mensajes", methods=["GET"])
+def get_mensajes():
+    """Entrega (y vacía) los avisos pendientes del supervisor para este operador."""
+    usuario = request.args.get("user", "").strip()
+    db = cargar_db()
+    if not usuario or usuario == "log_global" or usuario not in db:
+        return jsonify({"mensajes": []})
+    pendientes = db[usuario]["datos"].get("mensajes_pendientes", [])
+    if pendientes:
+        db[usuario]["datos"]["mensajes_pendientes"] = []
+        guardar_db(db)
+    return jsonify({"mensajes": pendientes})
+
+
+@app.route("/get_ranking", methods=["GET"])
+def get_ranking():
+    return jsonify({"ranking": calcular_ranking(cargar_db())})
+
+
 # ── INTERFAZ WEB CONTROL INTERNO ──
 
 @app.route("/", methods=["GET", "POST"])
@@ -167,7 +225,9 @@ def panel():
         ultimo_msj=ultimo_msj,
         equipo=db,
         lista_usuarios=lista_usuarios,
-        log_global=log_global
+        log_global=log_global,
+        ranking=calcular_ranking(db),
+        presencia={k: estado_operador(k) for k in lista_usuarios}
     )
 
 
@@ -204,6 +264,30 @@ def enviar_tarea_web():
         guardar_db(db)
         return jsonify({"success": True, "frase": db[destinatario]["datos"]["ultimo_msj"]})
     return jsonify({"success": False, "error": "El destino no existe"}), 400
+
+
+@app.route("/enviar_mensaje_web", methods=["POST"])
+def enviar_mensaje_web():
+    if "usuario" not in session:
+        return jsonify({"success": False, "error": "Sesión caducada"}), 403
+    destinatario = request.form.get("destinatario", "").strip()
+    texto = request.form.get("texto", "").strip()[:200]
+    if not destinatario or not texto:
+        return jsonify({"success": False, "error": "Campos incompletos"}), 400
+    db = cargar_db()
+    if destinatario == "*":
+        destinos = [k for k in db if k != "log_global" and k != session["usuario"]]
+    elif destinatario in db and destinatario != "log_global":
+        destinos = [destinatario]
+    else:
+        return jsonify({"success": False, "error": "El destino no existe"}), 400
+    if not destinos:
+        return jsonify({"success": False, "error": "No hay otros operadores en la red"}), 400
+    msg = {"de": session["usuario"], "texto": texto, "hora": datetime.now().strftime("%H:%M")}
+    for d in destinos:
+        db[d]["datos"].setdefault("mensajes_pendientes", []).append(dict(msg))
+    guardar_db(db)
+    return jsonify({"success": True, "enviados": len(destinos)})
 
 
 @app.route("/agregar_usuario_ajax", methods=["POST"])
@@ -512,6 +596,14 @@ HTML_PANEL = """
     .launch-name { font-size: 28px; color: var(--neon); letter-spacing: 4px; text-shadow: 0 0 15px var(--neon); font-weight: bold; }
     
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    .rank-row { display: grid; grid-template-columns: 44px 1fr auto; gap: 14px; align-items: center; padding: 11px 10px; border-bottom: 0.5px solid var(--border); border-radius: 8px; }
+    .rank-pos { font-size: 20px; text-align: center; font-family: 'Share Tech Mono', monospace; color: var(--muted); }
+    .rank-pts { color: var(--neon); font-family: 'Share Tech Mono', monospace; font-weight: bold; font-size: 14px; }
+    .pres { font-size: 9px; padding: 1px 6px; border-radius: 4px; margin-left: 6px; font-family: 'Share Tech Mono', monospace; letter-spacing: 1px; }
+    .pres-desconectado { color: #666; border: 0.5px solid #333; }
+    .pres-libre { color: var(--neon); border: 0.5px solid var(--neon-border); }
+    .pres-enfoque { color: var(--amber); border: 0.5px solid rgba(245,166,35,0.4); }
   </style>
 </head>
 <body>
@@ -564,6 +656,30 @@ HTML_PANEL = """
     </form>
   </div>
 
+  <!-- CARD AVISOS AL OPERADOR -->
+  <div class="card stagger-2">
+    <div class="card-label"><i class="ti ti-message-2"></i> Enviar Aviso al Operador</div>
+    <form id="msg-form" onsubmit="enviarMensaje(event)">
+      <div class="form-row" style="grid-template-columns: 1fr 2fr;">
+        <div class="form-group">
+          <label>Para</label>
+          <select name="destinatario" id="msg-dest">
+            <option value="*">Todos los operadores</option>
+            {% for user in lista_usuarios %}
+              <option value="{{ user }}">{{ user }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Mensaje (máx. 200 caracteres)</label>
+          <input type="text" name="texto" id="msg-texto" maxlength="200" placeholder="Ej: Revisar la línea 3 antes del cambio de turno" required>
+        </div>
+      </div>
+      <button type="submit" class="deploy-btn"><i class="ti ti-send"></i><span>Enviar aviso</span></button>
+      <div class="import-result" id="msg-result"></div>
+    </form>
+  </div>
+
   <!-- CARD GESTIÓN INDIVIDUAL -->
   <div class="card stagger-2">
     <div class="card-label"><i class="ti ti-user-plus"></i> Enlazar Nodo Individual</div>
@@ -611,7 +727,8 @@ HTML_PANEL = """
               <span class="sdot sdot-active"></span><span style="color:#fff;">{{ op_info.datos.tarea_actual }}</span>
             {% endif %}
           </div>
-          <div class="op-via">Mando: {{ op_info.datos.enviado_por }}</div>
+          {% set est = presencia.get(op_name, 'desconectado') %}
+          <div class="op-via">Mando: {{ op_info.datos.enviado_por }}<span class="pres pres-{{ est }}">{{ {'desconectado': 'DESCONECTADO', 'libre': 'EN LÍNEA', 'enfoque': 'EN ENFOQUE'}.get(est, 'EN LÍNEA') }}</span></div>
         </div>
         <div class="op-stats">
           <span class="stat-chip stat-ok"><i class="ti ti-check"></i>{{ op_info.datos.rendimiento.exitos }}</span>
@@ -630,8 +747,24 @@ HTML_PANEL = """
   </div>
 
   <div class="card stagger-5">
+    <div class="card-label"><i class="ti ti-trophy"></i> Ranking de Operadores</div>
+    <div id="ranking-container">
+      {% for r in ranking %}
+      <div class="rank-row">
+        <div class="rank-pos">{% if loop.index == 1 %}🥇{% elif loop.index == 2 %}🥈{% elif loop.index == 3 %}🥉{% else %}{{ loop.index }}{% endif %}</div>
+        <div>
+          <div class="op-name">{{ r.nombre }}</div>
+          <div class="op-via">{{ r.exitos }} a tiempo · {{ r.retrasos }} con retraso{% if r.puntualidad is not none %} · {{ r.puntualidad }}% puntualidad{% endif %}</div>
+        </div>
+        <div class="rank-pts">{{ r.puntos }} pts</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card stagger-5">
     <div class="card-label"><i class="ti ti-history"></i> Transmisiones Recientes</div>
-    <div class="log-scroll">
+    <div class="log-scroll" id="log-scroll-box">
       {% if log_global %}
         {% for log in log_global[::-1] %}
           <div class="log-entry">
@@ -754,11 +887,11 @@ function importarOperadores() {
       let html = '';
       if (data.total > 0) {
         html += '<b style="color:var(--neon)"><i class="ti ti-check"></i> ' + data.total + ' operador(es) registrado(s):</b>';
-        html += '<div class="tag-list">' + data.agregados.map(n => '<span class="tag">' + n + '</span>').join('') + '</div>';
+        html += '<div class="tag-list">' + data.agregados.map(n => '<span class="tag">' + esc(n) + '</span>').join('') + '</div>';
       }
       if (data.omitidos.length > 0) {
         html += '<div style="margin-top:8px;color:#f87171"><i class="ti ti-alert-triangle"></i> ' + data.omitidos.length + ' omitido(s) (ya existen o ID inválido):</div>';
-        html += '<div class="tag-list">' + data.omitidos.map(n => '<span class="tag tag-skip">' + n + '</span>').join('') + '</div>';
+        html += '<div class="tag-list">' + data.omitidos.map(n => '<span class="tag tag-skip">' + esc(n) + '</span>').join('') + '</div>';
       }
       resultDiv.className = 'import-result show ' + (data.omitidos.length > 0 && data.total === 0 ? 'import-warn' : 'import-ok');
       resultDiv.innerHTML = html;
@@ -789,6 +922,44 @@ function eliminarOperadorAjax(nombre) {
     .then(data => { if(data.success) location.reload(); });
   }, 450);
 }
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function enviarMensaje(e) {
+  e.preventDefault();
+  const res = document.getElementById('msg-result');
+  fetch('/enviar_mensaje_web', { method: 'POST', body: new FormData(document.getElementById('msg-form')) })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      res.className = 'import-result show import-ok';
+      res.innerHTML = '<i class="ti ti-check"></i> Aviso enviado a ' + data.enviados + ' operador(es). Llegará a su app en unos segundos.';
+      document.getElementById('msg-texto').value = '';
+    } else {
+      res.className = 'import-result show import-warn';
+      res.innerHTML = '<i class="ti ti-alert-circle"></i> ' + esc(data.error);
+    }
+  });
+}
+
+// Actualiza monitor, ranking y registros sin recargar la página (el supervisor ve los cambios en vivo)
+async function refrescarPanel() {
+  if (document.getElementById('launch-overlay').classList.contains('active')) return;
+  try {
+    const res = await fetch('/panel', { credentials: 'same-origin' });
+    if (!res.ok) return;
+    const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+    for (const id of ['operator-rows-container', 'ranking-container', 'log-table-body', 'log-scroll-box']) {
+      const nuevo = doc.getElementById(id), actual = document.getElementById(id);
+      if (nuevo && actual) actual.innerHTML = nuevo.innerHTML;
+    }
+  } catch (err) {}
+}
+setInterval(refrescarPanel, 5000);
 
 function showOverlay(texto) {
   const ov = document.getElementById('launch-overlay');
