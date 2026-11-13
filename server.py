@@ -330,7 +330,7 @@ def importar_operadores():
     omitidos = []
 
     for nombre in nombres:
-        if nombre == "log_global" or len(nombre) > 40:
+        if nombre == "log_global" or len(nombre) > 80:
             omitidos.append(nombre)
             continue
         if nombre in db:
